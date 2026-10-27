@@ -9,7 +9,7 @@ import { addDays, format } from "date-fns";
 
 export type BookingStatus = "confirmada" | "concluida" | "cancelada" | "ausente";
 export type ServiceRule = { id: string; days: number[]; start: string; end: string };
-export type Service = { id: string; name: string; duration: number; rules?: ServiceRule[] };
+export type Service = { id: string; name: string; duration: number; price: number; rules?: ServiceRule[] };
 export type Vacation = { id: string; start: string; end: string };
 export type BlockedClient = { id: string; phone: string; name?: string | undefined; reason?: string | undefined; createdAt: number };
 export type Adjust = { id: string; date: string; fromId: string; minutes: number; ids: string[]; at: number };
@@ -63,11 +63,28 @@ const defaultSettings: Settings = {
   vacationMessage: "Olá! Estamos de férias entre {inicio} e {fim}. Voltamos logo — obrigado pela preferência!",
 };
 const defaultServices: Service[] = [
-  { id: "corte", name: "Corte", duration: 30 },
-  { id: "barba", name: "Barba", duration: 30 },
-  { id: "combo", name: "Corte + Barba", duration: 60 },
-  { id: "pigmentacao", name: "Pigmentação", duration: 45 },
+  { id: "corte", name: "Corte", duration: 30, price: 35 },
+  { id: "barba", name: "Barba", duration: 30, price: 35 },
+  { id: "combo", name: "Corte + Barba", duration: 60, price: 70 },
+  { id: "pigmentacao", name: "Pigmentação", duration: 45, price: 0 },
 ];
+
+// Existing browser data predates the price field. Keep the original services,
+// supplement missing prices and never overwrite a price the barber has set.
+const fallbackPrices: Record<string, number> = {
+  corte: 35,
+  barba: 35,
+  combo: 70,
+  pigmentacao: 0,
+};
+function normalizeService(service: Service): Service {
+  return {
+    ...service,
+    price: typeof service.price === "number" && Number.isFinite(service.price) && service.price >= 0
+      ? service.price
+      : (fallbackPrices[service.id] ?? 0),
+  };
+}
 const empty: State = {
   loaded: false,
   services: defaultServices,
@@ -168,7 +185,17 @@ function init() {
   try {
     const raw = localStorage.getItem(KEY);
     const parsed = raw ? JSON.parse(raw) : null;
-    state = parsed ? { ...empty, ...parsed, settings: { ...defaultSettings, ...parsed.settings }, loaded: true } : { ...empty, loaded: true, updatedAt: Date.now() };
+    state = parsed
+      ? {
+          ...empty,
+          ...parsed,
+          services: Array.isArray(parsed.services)
+            ? parsed.services.map(normalizeService)
+            : defaultServices,
+          settings: { ...defaultSettings, ...parsed.settings },
+          loaded: true,
+        }
+      : { ...empty, loaded: true, updatedAt: Date.now() };
   } catch {
     state = { ...empty, loaded: true };
   }
