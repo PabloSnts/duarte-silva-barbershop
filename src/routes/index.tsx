@@ -139,7 +139,7 @@ function Index() {
     }
     setAppointments((current) => current.map((a) => {
       if (a.time < delayFrom) return a;
-      const [h, m] = a.time.split(":").map(Number);
+      const [h = 0, m = 0] = a.time.split(":").map(Number);
       const total = Math.max(0, h * 60 + m + offset);
       return { ...a, time: `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}` };
     }).sort((a, b) => a.time.localeCompare(b.time)));
