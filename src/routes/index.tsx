@@ -49,7 +49,7 @@ function Index() {
   const [showBooking, setShowBooking] = useState(false);
   const [showMobileNav, setShowMobileNav] = useState(false);
   const [notice, setNotice] = useState("");
-  const [booking, setBooking] = useState({ name: "", phone: "", date: "2026-10-27", time: "16:00", service: "Corte de cabelo" });
+  const [booking, setBooking] = useState({ name: "", phone: "", date: "2026-10-27", time: "16:00", serviceNames: ["Corte de cabelo"] as string[] });
   const [blocked, setBlocked] = useState<{ name: string; phone: string; reason: string; date: string }[]>([
     { name: "Contato bloqueado", phone: "(31) 90000-0000", reason: "Solicitação do responsável", date: "12/10/2026" },
   ]);
@@ -80,9 +80,16 @@ function Index() {
       showNotice("Este telefone está na Blacklist. A reserva não pode ser criada.");
       return;
     }
-    const selected = services.find((item) => item.name === booking.service) ?? services[0];
+    const selectedServices = services.filter((item) => booking.serviceNames.includes(item.name));
+    if (selectedServices.length === 0) {
+      showNotice("Selecione pelo menos um serviço.");
+      return;
+    }
+    const totalDuration = selectedServices.reduce((sum, item) => sum + item.duration, 0);
+    const totalPrice = selectedServices.reduce((sum, item) => sum + item.price, 0);
+    const serviceLabel = selectedServices.map((item) => item.name).join(" + ");
     const [hour, minute] = booking.time.split(":").map(Number);
-    const endMinute = hour * 60 + minute + selected.duration;
+    const endMinute = hour * 60 + minute + totalDuration;
     const end = `${String(Math.floor(endMinute / 60)).padStart(2, "0")}:${String(endMinute % 60).padStart(2, "0")}`;
     const overlaps = appointments.some((a) => {
       const [h, m] = a.time.split(":").map(Number);
@@ -95,11 +102,11 @@ function Index() {
     }
     setAppointments((current) => [...current, {
       id: Math.max(0, ...current.map((a) => a.id)) + 1, name: booking.name.trim(),
-      phone: booking.phone, service: booking.service, time: booking.time,
-      duration: selected.duration, status: "Confirmado", price: selected.price,
+      phone: booking.phone, service: serviceLabel, time: booking.time,
+      duration: totalDuration, status: "Confirmado", price: totalPrice,
     }].sort((a, b) => a.time.localeCompare(b.time)));
     setShowBooking(false);
-    setBooking({ name: "", phone: "", date: "2026-10-27", time: "16:00", service: "Corte de cabelo" });
+    setBooking({ name: "", phone: "", date: "2026-10-27", time: "16:00", serviceNames: ["Corte de cabelo"] });
     showNotice(`Reserva criada. Atendimento previsto até ${end}.`);
   }
 
@@ -163,10 +170,10 @@ function Index() {
           <div className="modal-heading"><div><span className="eyebrow">AGENDA · NOVO REGISTRO</span><h2>Nova reserva</h2><p>Preencha os dados para adicionar um atendimento.</p></div><button className="icon-button" onClick={() => setShowBooking(false)} aria-label="Fechar"><X size={19} /></button></div>
           <div className="form-grid"><label className="field full-field">Nome do cliente<input value={booking.name} onChange={(e) => setBooking({ ...booking, name: e.target.value })} placeholder="Ex.: João da Silva" /></label>
           <label className="field full-field">Telefone / WhatsApp<input value={booking.phone} onChange={(e) => setBooking({ ...booking, phone: e.target.value })} placeholder="(31) 99999-9999" /></label>
-          <label className="field">Serviço<select value={booking.service} onChange={(e) => setBooking({ ...booking, service: e.target.value })}>{services.map((s) => <option key={s.name}>{s.name}</option>)}</select></label>
+          <div className="field full-field"><span className="field-label">Serviços</span><p className="field-help">Selecione um ou mais serviços para o mesmo atendimento.</p><div className="booking-services">{services.map((s) => { const checked = booking.serviceNames.includes(s.name); return <label key={s.name} className={`booking-service-option ${checked ? "service-option-selected" : ""}`}><input type="checkbox" checked={checked} onChange={(e) => setBooking((current) => ({ ...current, serviceNames: e.target.checked ? [...current.serviceNames, s.name] : current.serviceNames.filter((name) => name !== s.name) }))} /><span className="booking-service-check">{checked && <Check size={13} />}</span><span className="booking-service-copy"><strong>{s.name}</strong><small>{s.duration} min · R$ {s.price},00</small></span><span className="booking-service-price">R$ {s.price},00</span></label>; })}</div></div>
           <label className="field">Data<input type="date" value={booking.date} onChange={(e) => setBooking({ ...booking, date: e.target.value })} /></label>
           <label className="field">Horário<select value={booking.time} onChange={(e) => setBooking({ ...booking, time: e.target.value })}>{Array.from({ length: 24 }, (_, i) => { const mins = 8 * 60 + i * 30; return mins <= 19 * 60 + 30 ? `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}` : null; }).filter(Boolean).map((time) => <option key={time}>{time}</option>)}</select></label>
-          <div className="booking-summary"><Clock3 size={17} /><span>Duração estimada</span><strong>{services.find((s) => s.name === booking.service)?.duration ?? 30} min</strong><span className="summary-divider" /><span>Valor</span><strong>R$ {services.find((s) => s.name === booking.service)?.price ?? 35},00</strong></div>
+          <div className="booking-summary"><Clock3 size={17} /><span>Duração total</span><strong>{services.filter((s) => booking.serviceNames.includes(s.name)).reduce((sum, s) => sum + s.duration, 0)} min</strong><span className="summary-divider" /><span>Valor total</span><strong>R$ {services.filter((s) => booking.serviceNames.includes(s.name)).reduce((sum, s) => sum + s.price, 0)},00</strong></div>
           <p className="form-note full-field"><CircleAlert size={15} /> Demonstração: as reservas ficam apenas nesta sessão do navegador. A persistência e validação definitiva dependem da integração com o Supabase existente.</p></div>
           <div className="modal-actions"><button className="button button-secondary" onClick={() => setShowBooking(false)}>Cancelar</button><button className="button button-primary" onClick={saveBooking}><Check size={16} /> Confirmar reserva</button></div>
         </section>
@@ -243,3 +250,19 @@ function Settings({ tvNameFormat, setTvNameFormat, workDays, setWorkDays, vacati
   const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
   return <><PageHeading eyebrow="PREFERÊNCIAS DA OPERAÇÃO" title="Configurações" description="Personalize expediente, recesso e experiência da TV." /><div className="settings-grid"><section className="panel settings-card"><div className="settings-title"><div className="settings-icon"><Clock3 size={19} /></div><div><h3>Expediente e folgas</h3><p>Defina os dias regulares de atendimento.</p></div></div><span className="field-label">DIAS DE TRABALHO</span><div className="days-picker">{days.map((day) => <button key={day} className={workDays.includes(day) ? "day-selected" : ""} onClick={() => setWorkDays(workDays.includes(day) ? workDays.filter((d) => d !== day) : [...workDays, day])}>{day}</button>)}</div><div className="setting-row"><label>Início do expediente</label><input type="time" defaultValue="08:00" /></div><div className="setting-row"><label>Fim do expediente</label><input type="time" defaultValue="20:00" /></div><div className="setting-row"><label>Intervalo de almoço</label><span>12:00 — 13:00</span></div></section><section className="panel settings-card"><div className="settings-title"><div className="settings-icon"><CalendarDays size={19} /></div><div><h3>Férias e recesso</h3><p>Período de indisponibilidade programada.</p></div></div><label className="field">Data de início<input type="date" value={vacationStart} onChange={(e) => setVacationStart(e.target.value)} /></label><label className="field">Data de término<input type="date" value={vacationEnd} onChange={(e) => setVacationEnd(e.target.value)} min={vacationStart || undefined} /></label><label className="field">Mensagem de ausência<textarea rows={3} defaultValue="Estamos em recesso até [data]. Retornaremos nossos atendimentos em breve!" /></label></section><section className="panel settings-card"><div className="settings-title"><div className="settings-icon"><Monitor size={19} /></div><div><h3>Visualização na TV</h3><p>Defina como os clientes serão identificados na fila.</p></div></div><label className="field">Informação do cliente<select value={tvNameFormat} onChange={(e) => setTvNameFormat(e.target.value)}><option>Primeiro nome</option><option>Nome e sobrenome</option><option>Iniciais</option><option>Nome - Serviços</option></select></label><div className="tv-preview"><div className="tv-preview-head"><Monitor size={15} /> PRÉVIA DO LOUNGE DISPLAY</div><strong>{tvNameFormat === "Primeiro nome" ? "Pablo" : tvNameFormat === "Iniciais" ? "PS" : tvNameFormat === "Nome - Serviços" ? "Pablo - Corte + Barba" : "Pablo Santos"}</strong><span>Em atendimento · cadeira 01</span></div></section><section className="panel settings-card"><div className="settings-title"><div className="settings-icon"><BriefcaseBusiness size={19} /></div><div><h3>Preferências gerais</h3><p>Opções de experiência e operação.</p></div></div><div className="setting-row"><div><strong>Notificações de reserva</strong><small>Feedback visual ao salvar agendamentos</small></div><span className="toggle-on">Ativo</span></div><div className="setting-row"><div><strong>Passos de horário</strong><small>Intervalos aceitos na agenda</small></div><strong>30 minutos</strong></div><div className="setting-row"><div><strong>Modo de dados</strong><small>Integração ainda não configurada</small></div><span className="mode-badge">Demonstração</span></div><button className="button button-primary full-button" onClick={() => showNotice("Preferências atualizadas apenas nesta sessão. A gravação permanente será ligada ao Supabase existente.")}><Check size={16} /> Salvar preferências</button></section></div><div className="info-banner"><CircleAlert size={17} /><p>As configurações ainda são locais e demonstrativas. Regras de expediente, férias e bloqueios precisam ser validadas também no backend antes de uso real.</p></div></>;
 }
+
+
+/* Multi-service selection in the new booking form */
+.booking-services{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}
+.booking-service-option{display:flex;align-items:center;gap:10px;min-width:0;padding:13px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:10px;background:rgba(255,255,255,.025);cursor:pointer;transition:border-color .18s,background .18s}
+.booking-service-option input{position:absolute;opacity:0;width:1px;height:1px}
+.booking-service-option:focus-within{outline:2px solid #d4af37;outline-offset:2px}
+.booking-service-option.service-option-selected{border-color:rgba(212,175,55,.72);background:rgba(212,175,55,.08)}
+.booking-service-check{display:grid;place-items:center;flex:0 0 20px;width:20px;height:20px;border:1px solid rgba(255,255,255,.25);border-radius:5px;color:#121316}
+.service-option-selected .booking-service-check{border-color:#d4af37;background:#d4af37}
+.booking-service-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
+.booking-service-copy strong{font-size:13px;font-weight:550;color:var(--foreground,#f1eee6)}
+.booking-service-copy small{font-size:11px;color:var(--muted-foreground,#999)}
+.booking-service-price{margin-left:auto;white-space:nowrap;font-size:12px;color:#d4af37}
+.field-help{margin:4px 0 8px;font-size:12px;color:var(--muted-foreground,#999)}
+@media(max-width:560px){.booking-services{grid-template-columns:1fr}.booking-service-option{padding:12px}}
