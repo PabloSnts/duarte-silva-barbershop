@@ -25,11 +25,14 @@ function TvDisplay() {
   const [now, setNow] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => localDateKey(new Date()));
+  const [view, setView] = useState<"Dia" | "Semana" | "Mês">("Dia");
   const changeDate = (offset: number) => {
     setSelectedDate((currentDate) => {
       const [y = 1970, m = 1, d = 1] = currentDate.split("-").map(Number);
       const nextDate = new Date(y, m - 1, d, 12, 0, 0);
-      nextDate.setDate(nextDate.getDate() + offset);
+      if (view === "Semana") nextDate.setDate(nextDate.getDate() + offset * 7);
+      else if (view === "Mês") nextDate.setMonth(nextDate.getMonth() + offset);
+      else nextDate.setDate(nextDate.getDate() + offset);
       return localDateKey(nextDate);
     });
   };
@@ -69,12 +72,24 @@ function TvDisplay() {
     };
   }, []);
 
+  const selectedDateObject = new Date(`${selectedDate}T12:00:00`);
+  const rangeStart = new Date(selectedDateObject);
+  if (view === "Semana") rangeStart.setDate(rangeStart.getDate() - ((rangeStart.getDay() + 6) % 7));
+  if (view === "Mês") rangeStart.setDate(1);
+  const rangeEnd = new Date(rangeStart);
+  if (view === "Semana") rangeEnd.setDate(rangeEnd.getDate() + 7);
+  else if (view === "Mês") rangeEnd.setMonth(rangeEnd.getMonth() + 1);
+  else rangeEnd.setDate(rangeEnd.getDate() + 1);
   const appointments = useMemo(() => {
     const today = localDateKey(now);
     return (store.appointments ?? [])
-      .filter((item) => (typeof item.date === "string" && item.date.length >= 10 ? item.date.slice(0, 10) : today) === selectedDate)
-      .sort((a, b) => a.time.localeCompare(b.time));
-  }, [store, now, selectedDate]);
+      .filter((item) => {
+        const itemDate = typeof item.date === "string" && item.date.length >= 10 ? item.date.slice(0, 10) : today;
+        return itemDate >= localDateKey(rangeStart) && itemDate < localDateKey(rangeEnd);
+      })
+      .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? "") || a.time.localeCompare(b.time));
+  }, [store, now, selectedDate, view]);
+  const selectedDayAppointments = appointments.filter((item) => (item.date ?? localDateKey(now)).slice(0,10) === selectedDate);
 
   const upcoming = appointments.filter((item) => {
     const status = item.status.toLowerCase();
@@ -94,7 +109,7 @@ function TvDisplay() {
 
     const isToday = selectedDate === localDateKey(now);
     const currentMinutes = isToday ? now.getHours() * 60 + now.getMinutes() : -1;
-    const busy = appointments
+    const busy = selectedDayAppointments
       .filter((item) => !/conclu|cancel/i.test(item.status))
       .map((item) => {
         const [hour = 0, minute = 0] = item.time.split(":").map(Number);
@@ -108,7 +123,7 @@ function TvDisplay() {
       if (slots.length === 4) break;
     }
     return slots;
-  }, [appointments, now, selectedDate, store.workDays, store.vacations]);
+  }, [selectedDayAppointments, now, selectedDate, store.workDays, store.vacations]);
 
   const toggleFullscreen = async () => {
     try {
@@ -123,7 +138,6 @@ function TvDisplay() {
   };
 
   const [selectedYear = 1970, selectedMonth = 1, selectedDay = 1] = selectedDate.split("-").map(Number);
-  const selectedDateObject = new Date(selectedYear, selectedMonth - 1, selectedDay);
   const formatDate = selectedDateObject.toLocaleDateString("pt-BR", {
     weekday: "long",
     day: "2-digit",
@@ -142,7 +156,7 @@ function TvDisplay() {
         <div className="tv-brand-mark"><Scissors size={31} strokeWidth={2.2} /></div>
         <div className="tv-brand">
           <strong>NAVALHA <span>&amp;</span> CO.</strong>
-          <small>{formatDate.charAt(0).toUpperCase() + formatDate.slice(1)}</small>
+          <small>{formatDate.charAt(0).toUpperCase() + formatDate.slice(1)} · {view}</small>
         </div>
         <div className="tv-header-right">
           <time>{now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time>
@@ -154,17 +168,19 @@ function TvDisplay() {
 
       <div className="tv-layout">
         <section className="tv-agenda">
-          <div className="tv-agenda-heading"><h1>{selectedDate === localDateKey(now) ? "AGENDA DE HOJE" : "AGENDA DO DIA"}</h1><div className="tv-date-controls"><button onClick={() => changeDate(-1)} aria-label="Dia anterior"><ChevronLeft size={19} /></button><label><CalendarDays size={17} /><input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} aria-label="Selecionar dia da agenda" /></label><button onClick={() => changeDate(1)} aria-label="Próximo dia"><ChevronRight size={19} /></button><button className="tv-today-button" onClick={() => setSelectedDate(localDateKey(now))}>Hoje</button></div></div>
+          <div className="tv-agenda-heading"><h1>{view === "Dia" ? (selectedDate === localDateKey(now) ? "AGENDA DE HOJE" : "AGENDA DO DIA") : view === "Semana" ? "AGENDA DA SEMANA" : "AGENDA DO MÊS"}</h1><div className="tv-date-controls"><div className="tv-view-switch">{(["Dia","Semana","Mês"] as const).map((item)=><button key={item} className={view===item?"selected":""} onClick={()=>setView(item)}>{item}</button>)}</div><button onClick={() => changeDate(-1)} aria-label="Dia anterior"><ChevronLeft size={19} /></button><label><CalendarDays size={17} /><input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} aria-label="Selecionar dia da agenda" /></label><button onClick={() => changeDate(1)} aria-label="Próximo dia"><ChevronRight size={19} /></button><button className="tv-today-button" onClick={() => setSelectedDate(localDateKey(now))}>Hoje</button></div></div>
           {appointments.length ? (
-            <div className="tv-appointment-list">
+            <div className={view === "Dia" ? "tv-appointment-list" : "tv-period-grid"}>
               {appointments.map((item) => {
+                const itemDate = (item.date ?? localDateKey(now)).slice(0,10);
+                const itemDateLabel = new Date(`${itemDate}T12:00:00`).toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"short"});
                 const completed = /conclu/i.test(item.status);
                 const cancelled = /cancel/i.test(item.status);
                 const [hour = 0, minute = 0] = item.time.split(":").map(Number);
                 const endMinutes = hour * 60 + minute + (item.duration || 30);
                 const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
                 return (
-                  <article className={`tv-appointment ${completed || cancelled ? "is-muted" : ""}`} key={item.id}>
+                  <article className={`tv-appointment ${completed || cancelled ? "is-muted" : ""}`} key={item.id}><small className="tv-appointment-date">{view !== "Dia" ? itemDateLabel : ""}</small>
                     <time className="tv-appointment-time">{item.time}</time>
                     <div className="tv-appointment-info">
                       <strong>{item.name} - {item.service}</strong>
@@ -176,7 +192,7 @@ function TvDisplay() {
               })}
             </div>
           ) : (
-            <div className="tv-empty">Nenhum agendamento para {selectedDate === localDateKey(now) ? "hoje" : "este dia"}.</div>
+            <div className="tv-empty">Nenhum agendamento para {view === "Dia" ? (selectedDate === localDateKey(now) ? "hoje" : "este dia") : view === "Semana" ? "esta semana" : "este mês"}.</div>
           )}
         </section>
 
@@ -194,7 +210,7 @@ function TvDisplay() {
             ) : <p>Sem próximos atendimentos</p>}
           </section>
           <section className="tv-panel tv-free-panel">
-            <h2>HORÁRIOS LIVRES</h2>
+            <h2>HORÁRIOS LIVRES · {selectedDateObject.toLocaleDateString("pt-BR",{day:"2-digit",month:"short"})}</h2>
             {freeSlots.length ? (
               <div className="tv-free-slots">{freeSlots.map((slot) => <span key={slot}>{slot}</span>)}</div>
             ) : <p>Sem horários livres disponíveis</p>}
@@ -214,7 +230,7 @@ function TvDisplay() {
         .tv-fullscreen{display:grid;place-items:center;padding:8px;border:0;background:transparent;color:#55565a;cursor:pointer}
         .tv-fullscreen:hover{color:#e5b34f}
         .tv-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(360px,1fr);gap:clamp(22px,2vw,36px);align-items:start}
-        .tv-agenda-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px;flex-wrap:wrap}.tv-agenda h1{margin:0;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(24px,2vw,36px);font-weight:700;color:#b9b1a3}.tv-date-controls{display:flex;align-items:center;gap:7px}.tv-date-controls button,.tv-date-controls label{display:flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:7px 10px;border:1px solid #34312a;border-radius:10px;background:#17181a;color:#d8b65b;cursor:pointer}.tv-date-controls label input{width:112px;border:0;outline:0;background:transparent;color:#e9e3d7;font:500 12px "Manrope",sans-serif;color-scheme:dark}.tv-date-controls .tv-today-button{font:600 12px "Manrope",sans-serif}
+        .tv-agenda-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px;flex-wrap:wrap}.tv-agenda h1{margin:0;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(24px,2vw,36px);font-weight:700;color:#b9b1a3}.tv-date-controls{display:flex;align-items:center;gap:7px}.tv-date-controls button,.tv-date-controls label{display:flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:7px 10px;border:1px solid #34312a;border-radius:10px;background:#17181a;color:#d8b65b;cursor:pointer}.tv-date-controls label input{width:112px;border:0;outline:0;background:transparent;color:#e9e3d7;font:500 12px "Manrope",sans-serif;color-scheme:dark}.tv-date-controls .tv-today-button{font:600 12px "Manrope",sans-serif}.tv-view-switch{display:flex;gap:3px;padding:3px;border:1px solid #34312a;border-radius:10px;background:#111214}.tv-view-switch button{min-height:29px;padding:5px 9px;border:0;background:transparent;color:#a7a29a;font:600 12px "Manrope",sans-serif}.tv-view-switch button.selected{background:#e5b34f;color:#111214}.tv-period-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px}.tv-period-grid .tv-appointment{position:relative;flex-wrap:wrap;gap:10px;min-height:78px;padding:15px}.tv-appointment-date{width:100%;color:#aaa49b;font-size:12px}.tv-period-grid .tv-appointment-time{flex-basis:80px;font-size:32px}.tv-period-grid .tv-appointment-info strong{font-size:16px}.tv-period-grid .tv-status{font-size:11px;padding:6px 10px}
         .tv-appointment-list{display:flex;flex-direction:column;gap:13px}
         .tv-appointment{display:flex;align-items:center;gap:clamp(15px,2vw,35px);min-height:110px;padding:16px 27px;border:1px solid #2b2c2f;border-radius:23px;background:#17181a}
         .tv-appointment.is-muted{background:#111214;border-color:#202123;color:#858585}
@@ -240,7 +256,7 @@ function TvDisplay() {
         .tv-free-slots span{padding:10px 18px;border-radius:18px;background:#203128;color:#55bd80;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(20px,1.8vw,31px);font-weight:700}
         .tv-empty{padding:30px;border:1px solid #2b2c2f;border-radius:22px;color:#aaa49b;background:#17181a;font-size:20px}
         @media(max-width:1000px){.tv-layout{grid-template-columns:1fr}.tv-sidebar{display:grid;grid-template-columns:1fr 1fr;gap:18px}.tv-free-panel{margin-top:0}.tv-appointment-time{flex-basis:115px}}
-        @media(max-width:650px){.tv-agenda-heading{align-items:flex-start}.tv-date-controls{width:100%;flex-wrap:wrap}.tv-date-controls label{flex:1}.tv-date-controls label input{width:100%;min-width:0}.tv-screen{padding:12px}.tv-header{gap:12px;margin-bottom:25px}.tv-brand-mark{flex-basis:48px;width:48px;height:48px;border-radius:13px}.tv-brand-mark svg{width:24px}.tv-brand strong{font-size:28px}.tv-brand small{font-size:11px}.tv-header-right{gap:6px}.tv-header-right time{font-size:36px}.tv-fullscreen svg{width:17px}.tv-sidebar{display:flex;flex-direction:column}.tv-free-panel{margin-top:0}.tv-appointment{gap:10px;min-height:80px;padding:12px;border-radius:16px;flex-wrap:wrap}.tv-appointment-time{flex-basis:70px;font-size:34px}.tv-appointment-info{min-width:calc(100% - 90px)}.tv-appointment-info strong{font-size:15px}.tv-appointment-info span{font-size:11px}.tv-status{margin-left:80px;padding:6px 10px;font-size:11px}.tv-panel{padding:20px;border-radius:17px}}
+        @media(max-width:650px){.tv-view-switch{order:-1}.tv-date-controls{gap:4px}.tv-agenda-heading{align-items:flex-start}.tv-date-controls{width:100%;flex-wrap:wrap}.tv-date-controls label{flex:1}.tv-date-controls label input{width:100%;min-width:0}.tv-screen{padding:12px}.tv-header{gap:12px;margin-bottom:25px}.tv-brand-mark{flex-basis:48px;width:48px;height:48px;border-radius:13px}.tv-brand-mark svg{width:24px}.tv-brand strong{font-size:28px}.tv-brand small{font-size:11px}.tv-header-right{gap:6px}.tv-header-right time{font-size:36px}.tv-fullscreen svg{width:17px}.tv-sidebar{display:flex;flex-direction:column}.tv-free-panel{margin-top:0}.tv-appointment{gap:10px;min-height:80px;padding:12px;border-radius:16px;flex-wrap:wrap}.tv-appointment-time{flex-basis:70px;font-size:34px}.tv-appointment-info{min-width:calc(100% - 90px)}.tv-appointment-info strong{font-size:15px}.tv-appointment-info span{font-size:11px}.tv-status{margin-left:80px;padding:6px 10px;font-size:11px}.tv-panel{padding:20px;border-radius:17px}}
       `}</style>
     </main>
   );
