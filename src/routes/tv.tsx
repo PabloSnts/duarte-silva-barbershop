@@ -33,7 +33,12 @@ function TvDisplay() {
       return localDateKey(nextDate);
     });
   };
-  const [store, setStore] = useState<{ appointments: TvAppointment[] }>(() => {
+  type TvStore = {
+    appointments: TvAppointment[];
+    workDays?: string[];
+    vacations?: { start: string; end: string }[];
+  };
+  const [store, setStore] = useState<TvStore>(() => {
     try {
       const raw = localStorage.getItem("barbearia-store-v1");
       if (raw) return JSON.parse(raw);
@@ -67,7 +72,7 @@ function TvDisplay() {
   const appointments = useMemo(() => {
     const today = localDateKey(now);
     return (store.appointments ?? [])
-      .filter((item) => item.date ? item.date === selectedDate : selectedDate === today)
+      .filter((item) => (typeof item.date === "string" && item.date.length >= 10 ? item.date.slice(0, 10) : today) === selectedDate)
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [store, now, selectedDate]);
 
@@ -80,8 +85,13 @@ function TvDisplay() {
 
   const freeSlots = useMemo(() => {
     const [year = 1970, month = 1, date = 1] = selectedDate.split("-").map(Number);
-    const day = new Date(year, month - 1, date).getDay();
-    if (day === 0 || day === 2) return [];
+    const selectedDay = new Date(year, month - 1, date, 12).getDay();
+    const weekdayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+    const configuredWorkDays = Array.isArray(store.workDays) ? store.workDays : ["Seg", "Qua", "Qui", "Sex", "Sáb"];
+    const vacations = Array.isArray(store.vacations) ? store.vacations : [];
+    const isVacation = vacations.some((period) => selectedDate >= period.start && selectedDate <= period.end);
+    if (!configuredWorkDays.includes(weekdayLabels[selectedDay]) || isVacation) return [];
+
     const isToday = selectedDate === localDateKey(now);
     const currentMinutes = isToday ? now.getHours() * 60 + now.getMinutes() : -1;
     const busy = appointments
@@ -98,7 +108,7 @@ function TvDisplay() {
       if (slots.length === 4) break;
     }
     return slots;
-  }, [appointments, now, selectedDate]);
+  }, [appointments, now, selectedDate, store.workDays, store.vacations]);
 
   const toggleFullscreen = async () => {
     try {
