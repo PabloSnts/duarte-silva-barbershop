@@ -25,6 +25,10 @@ function TvDisplay() {
   const [now, setNow] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => localDateKey(new Date()));
+  const changeDate = (offset: number) => {
+    const [y = 1970, m = 1, d = 1] = selectedDate.split("-").map(Number);
+    setSelectedDate(localDateKey(new Date(y, m - 1, d + offset)));
+  };
   const [store, setStore] = useState<{ appointments: TvAppointment[] }>(() => {
     try {
       const raw = localStorage.getItem("barbearia-store-v1");
