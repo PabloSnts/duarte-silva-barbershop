@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Scissors, Clock3, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/tv")({ component: TvDisplay });
 
-const queue = [
+const fallbackQueue = [
   { name: "Pablo - Corte + Barba", time: "10:00", status: "EM ATENDIMENTO", active: true },
   { name: "Lucas Ferreira", time: "10:30", status: "PRÓXIMO", active: false },
   { name: "André Martins", time: "11:30", status: "NA FILA", active: false },
@@ -12,7 +12,7 @@ const queue = [
 ];
 
 function TvDisplay() {
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState(new Date());\n  const [store, setStore] = useState<{ appointments: { id: number; name: string; service: string; time: string; date?: string; status: string; duration: number }[]; tvNameFormat?: string }>(() => { try { const raw = localStorage.getItem("barbearia-store-v1"); if (raw) return JSON.parse(raw); } catch {} return { appointments: [] }; });\n  const queue = useMemo(() => { const today = new Date().toISOString().slice(0, 10); const appointments = (store.appointments ?? []).filter((item) => !item.date || item.date === today).sort((a, b) => a.time.localeCompare(b.time)); if (!appointments.length) return fallbackQueue; return appointments.map((item, index) => ({ name: store.tvNameFormat === "Iniciais" ? item.name.split(/\\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() : store.tvNameFormat === "Primeiro nome" ? item.name.split(/\\s+/)[0] : store.tvNameFormat === "Nome e sobrenome" ? item.name.split(/\\s+/).slice(0, 2).join(" ") : `${item.name} — ${item.service}`, time: item.time, status: index === 0 ? "PRÓXIMO" : "AGENDADO", active: false })); }, [store]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
