@@ -1,72 +1,221 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Scissors, Clock3, Sparkles } from "lucide-react";
+import { Scissors, Maximize, Minimize } from "lucide-react";
 
 export const Route = createFileRoute("/tv")({ component: TvDisplay });
 
-const fallbackQueue = [
-  { name: "Pablo - Corte + Barba", time: "10:00", status: "EM ATENDIMENTO", active: true },
-  { name: "Lucas Ferreira", time: "10:30", status: "PRÓXIMO", active: false },
-  { name: "André Martins", time: "11:30", status: "NA FILA", active: false },
-  { name: "Gabriel Souza", time: "14:00", status: "AGENDADO", active: false },
-];
+type TvAppointment = {
+  id: number;
+  name: string;
+  service: string;
+  time: string;
+  date?: string;
+  status: string;
+  duration: number;
+};
+
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 function TvDisplay() {
   const [now, setNow] = useState(new Date());
-  const [store, setStore] = useState<{ appointments: { id: number; name: string; service: string; time: string; date?: string; status: string; duration: number }[]; tvNameFormat?: string }>(() => { try { const raw = localStorage.getItem("barbearia-store-v1"); if (raw) return JSON.parse(raw); } catch {} return { appointments: [] }; });
-  const queue = useMemo(() => { const today = new Date().toISOString().slice(0, 10); const appointments = (store.appointments ?? []).filter((item) => !item.date || item.date === today).sort((a, b) => a.time.localeCompare(b.time)); if (!appointments.length) return fallbackQueue; return appointments.map((item, index) => ({ name: store.tvNameFormat === "Iniciais" ? item.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() : store.tvNameFormat === "Primeiro nome" ? item.name.split(/\s+/)[0] : store.tvNameFormat === "Nome e sobrenome" ? item.name.split(/\s+/).slice(0, 2).join(" ") : `${item.name} — ${item.service}`, time: item.time, status: index === 0 ? "PRÓXIMO" : "AGENDADO", active: false })); }, [store]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [store, setStore] = useState<{ appointments: TvAppointment[] }>(() => {
+    try {
+      const raw = localStorage.getItem("barbearia-store-v1");
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return { appointments: [] };
+  });
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
-    const channel = new BroadcastChannel("barbearia-store-v1");
-    const refresh = () => { try { const raw = localStorage.getItem("barbearia-store-v1"); if (raw) setStore(JSON.parse(raw)); } catch {} };
-    channel.addEventListener("message", refresh);
+    const refresh = () => {
+      try {
+        const raw = localStorage.getItem("barbearia-store-v1");
+        if (raw) setStore(JSON.parse(raw));
+      } catch {}
+    };
+    let channel: BroadcastChannel | undefined;
+    try {
+      channel = new BroadcastChannel("barbearia-store-v1");
+      channel.addEventListener("message", refresh);
+    } catch {}
     window.addEventListener("storage", refresh);
     refresh();
-    return () => { window.clearInterval(timer); channel.removeEventListener("message", refresh); window.removeEventListener("storage", refresh); channel.close(); };
+    return () => {
+      window.clearInterval(timer);
+      channel?.removeEventListener("message", refresh);
+      channel?.close();
+      window.removeEventListener("storage", refresh);
+    };
   }, []);
+
+  const appointments = useMemo(() => {
+    const today = localDateKey(now);
+    return (store.appointments ?? [])
+      .filter((item) => !item.date || item.date === today)
+      .sort((a, b) => a.time.localeCompare(b.time));
+  }, [store, now]);
+
+  const upcoming = appointments.filter((item) => {
+    const status = item.status.toLowerCase();
+    return !status.includes("conclu") && !status.includes("cancel") && item.time >= now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", hour12: false });
+  });
+
+  const freeSlots = useMemo(() => {
+    const day = now.getDay();
+    if (day === 0 || day === 2) return [];
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const busy = appointments
+      .filter((item) => !/conclu|cancel/i.test(item.status))
+      .map((item) => {
+        const [hour, minute] = item.time.split(":").map(Number);
+        return { start: hour * 60 + minute, end: hour * 60 + minute + (item.duration || 30) };
+      });
+    const slots: string[] = [];
+    for (let minute = 8 * 60; minute < 20 * 60; minute += 30) {
+      if (minute <= currentMinutes || (minute >= 12 * 60 && minute < 13 * 60)) continue;
+      if (busy.some((item) => minute < item.end && minute + 30 > item.start)) continue;
+      slots.push(`${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`);
+      if (slots.length === 4) break;
+    }
+    return slots;
+  }, [appointments, now]);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch {}
+  };
+
+  const formatDate = now.toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  });
+  const displayStatus = (status: string) => {
+    if (/conclu/i.test(status)) return "Concluída";
+    if (/aguard/i.test(status)) return "Aguardando";
+    if (/cancel/i.test(status)) return "Cancelada";
+    return "Confirmada";
+  };
 
   return (
     <main className="tv-screen">
       <header className="tv-header">
-        <div className="tv-brand-mark"><Scissors size={28} /></div>
-        <div className="tv-brand"><strong>DUARTE <span>&</span> SILVA</strong><small>BARBERSHOP</small></div>
-        <div className="tv-header-right"><span className="tv-open"><i /> ATENDIMENTO EM ANDAMENTO</span><time>{now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time></div>
-      </header>
-      <section className="tv-welcome">
-        <div className="tv-eyebrow"><Sparkles size={15} /> SEU MOMENTO. SEU ESTILO.</div>
-        <h1>Bem-vindo à <em>experiência</em>.</h1>
-        <p>Relaxe. Estamos preparando tudo para você.</p>
-      </section>
-      <section className="tv-now">
-        <div className="tv-now-label"><span className="tv-pulse" /> EM ATENDIMENTO AGORA</div>
-        <div className="tv-now-person">Pablo <span>— Corte + Barba</span></div>
-        <div className="tv-now-meta"><Clock3 size={17} /> Início às 10:00 <span className="tv-meta-separator" /> Cadeira 01</div>
-      </section>
-      <section className="tv-queue-section">
-        <div className="tv-section-title"><div><span className="tv-eyebrow">ACOMPANHAMENTO</span><h2>Fila de atendimento</h2></div><span className="tv-queue-count">03 NA SEQUÊNCIA</span></div>
-        <div className="tv-queue">
-          {queue.filter((item) => !item.active).map((item, index) => (
-            <article className={`tv-queue-card ${index === 0 ? "tv-next" : ""}`} key={item.name}>
-              <div className="tv-queue-index">{String(index + 1).padStart(2, "0")}</div>
-              <div className="tv-queue-info"><span>{item.status}</span><strong>{item.name}</strong></div>
-              <div className="tv-queue-time">{item.time}</div>
-            </article>
-          ))}
+        <div className="tv-brand-mark"><Scissors size={31} strokeWidth={2.2} /></div>
+        <div className="tv-brand">
+          <strong>NAVALHA <span>&amp;</span> CO.</strong>
+          <small>{formatDate.charAt(0).toUpperCase() + formatDate.slice(1)}</small>
         </div>
-      </section>
-      <footer className="tv-footer"><span>DUARTE & SILVA <i /> CUIDADO EM CADA DETALHE</span><span>Obrigado pela preferência.</span></footer>
+        <div className="tv-header-right">
+          <time>{now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</time>
+          <button className="tv-fullscreen" onClick={toggleFullscreen} aria-label={isFullscreen ? "Sair da tela cheia" : "Ativar tela cheia"}>
+            {isFullscreen ? <Minimize size={22} /> : <Maximize size={22} />}
+          </button>
+        </div>
+      </header>
+
+      <div className="tv-layout">
+        <section className="tv-agenda">
+          <h1>AGENDA DE HOJE</h1>
+          {appointments.length ? (
+            <div className="tv-appointment-list">
+              {appointments.map((item) => {
+                const completed = /conclu/i.test(item.status);
+                const cancelled = /cancel/i.test(item.status);
+                const [hour, minute] = item.time.split(":").map(Number);
+                const endMinutes = hour * 60 + minute + (item.duration || 30);
+                const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
+                return (
+                  <article className={`tv-appointment ${completed || cancelled ? "is-muted" : ""}`} key={item.id}>
+                    <time className="tv-appointment-time">{item.time}</time>
+                    <div className="tv-appointment-info">
+                      <strong>{item.name} - {item.service}</strong>
+                      <span>{item.service} · até {endTime}</span>
+                    </div>
+                    <span className={`tv-status ${completed ? "is-completed" : cancelled ? "is-cancelled" : "is-confirmed"}`}>{displayStatus(item.status)}</span>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="tv-empty">Nenhum agendamento para hoje.</div>
+          )}
+        </section>
+
+        <aside className="tv-sidebar">
+          <section className="tv-panel tv-next-panel">
+            <h2>PRÓXIMOS</h2>
+            {upcoming.length ? (
+              <div className="tv-next-list">
+                {upcoming.slice(0, 3).map((item) => (
+                  <div className="tv-next-item" key={item.id}>
+                    <time>{item.time}</time><span>{item.name}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <p>Sem próximos atendimentos</p>}
+          </section>
+          <section className="tv-panel tv-free-panel">
+            <h2>HORÁRIOS LIVRES</h2>
+            {freeSlots.length ? (
+              <div className="tv-free-slots">{freeSlots.map((slot) => <span key={slot}>{slot}</span>)}</div>
+            ) : <p>Sem horários livres disponíveis</p>}
+          </section>
+        </aside>
+      </div>
+
       <style>{`
-        .tv-screen{min-height:100vh;padding:clamp(24px,4vw,64px) clamp(22px,6vw,100px);background:radial-gradient(ellipse at 50% 35%,rgba(174,137,37,.12),transparent 44%),#0b0c0e;color:#f1eee6;font-family:"Manrope",ui-sans-serif,system-ui,sans-serif;display:flex;flex-direction:column}
-        .tv-header{display:flex;align-items:center;gap:15px;padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,.1)}
-        .tv-brand-mark{display:grid;place-items:center;width:52px;height:52px;border:1px solid rgba(212,175,55,.4);border-radius:14px;color:#d4af37;background:rgba(212,175,55,.08)}
-        .tv-brand strong{display:block;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(15px,1.6vw,23px);letter-spacing:.14em}.tv-brand strong span{color:#d4af37;font-style:italic}.tv-brand small{display:block;margin-top:6px;color:#8b8980;font-size:10px;letter-spacing:.25em}
-        .tv-header-right{margin-left:auto;display:flex;align-items:center;gap:clamp(15px,3vw,44px)}.tv-open{display:flex;align-items:center;gap:9px;color:#a9aa9f;font-size:clamp(9px,.9vw,12px);letter-spacing:.1em}.tv-open i,.tv-pulse{width:8px;height:8px;border-radius:50%;background:#74c998;box-shadow:0 0 12px rgba(116,201,152,.45)}.tv-header time{font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(25px,3vw,43px);color:#e2c65e}
-        .tv-welcome{text-align:center;padding:clamp(35px,6vh,75px) 0 35px}.tv-eyebrow{display:flex;align-items:center;justify-content:center;gap:9px;color:#d3b44c;font-size:clamp(9px,.9vw,12px);letter-spacing:.2em}.tv-welcome h1{margin:18px 0 12px;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(34px,5.2vw,76px);font-weight:400;letter-spacing:-.04em}.tv-welcome h1 em{color:#d7b84c;font-weight:400}.tv-welcome p{margin:0;color:#999991;font-size:clamp(13px,1.3vw,18px)}
-        .tv-now{width:min(100%,1050px);margin:0 auto;padding:clamp(22px,3vw,40px);text-align:center;border:1px solid rgba(212,175,55,.28);border-radius:18px;background:linear-gradient(115deg,rgba(212,175,55,.08),rgba(255,255,255,.018) 60%),#141518;box-shadow:0 20px 80px rgba(0,0,0,.2)}.tv-now-label{display:flex;align-items:center;justify-content:center;gap:10px;color:#d4b84f;font-size:clamp(9px,.9vw,12px);letter-spacing:.17em}.tv-now-person{margin:20px 0 14px;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(27px,4vw,56px)}.tv-now-person span{color:#c9b76e}.tv-now-meta{display:flex;align-items:center;justify-content:center;gap:10px;color:#96958c;font-size:clamp(11px,1.1vw,15px)}.tv-now-meta svg{color:#d4af37}.tv-meta-separator{height:15px;width:1px;margin:0 8px;background:rgba(255,255,255,.18)}
-        .tv-queue-section{width:min(100%,1050px);margin:clamp(30px,5vh,55px) auto 0;flex:1}.tv-section-title{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:18px}.tv-section-title .tv-eyebrow{justify-content:flex-start;font-size:9px}.tv-section-title h2{margin:8px 0 0;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(22px,2.2vw,31px);font-weight:400}.tv-queue-count{color:#9a988e;font-size:10px;letter-spacing:.13em}.tv-queue{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}.tv-queue-card{display:flex;align-items:center;gap:13px;min-width:0;padding:clamp(15px,2vw,25px);border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.025)}.tv-next{border-color:rgba(212,175,55,.3);background:rgba(212,175,55,.055)}.tv-queue-index{font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(20px,2vw,29px);color:#b39a43}.tv-queue-info{flex:1;min-width:0}.tv-queue-info span{display:block;color:#bba74f;font-size:8px;letter-spacing:.13em}.tv-queue-info strong{display:block;margin-top:8px;overflow-wrap:anywhere;font-size:clamp(11px,1.15vw,15px);font-weight:500}.tv-queue-time{color:#e3d7a4;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(17px,1.8vw,25px)}
-        .tv-footer{display:flex;justify-content:space-between;gap:15px;margin-top:45px;padding-top:20px;border-top:1px solid rgba(255,255,255,.08);color:#77786f;font-size:9px;letter-spacing:.12em}.tv-footer span:first-child{display:flex;align-items:center;gap:9px}.tv-footer i{width:3px;height:3px;background:#d4af37;border-radius:50%}
-        @media(max-width:700px){.tv-open{display:none}.tv-queue{grid-template-columns:1fr}.tv-queue-card{padding:15px}.tv-footer{flex-direction:column;align-items:center;text-align:center}.tv-welcome{padding:35px 0 25px}.tv-now-person span{display:block;margin-top:8px;font-size:.65em}.tv-header-right{gap:0}}
-        @media(min-width:1500px){.tv-screen{padding-left:9vw;padding-right:9vw}}
+        .tv-screen{box-sizing:border-box;min-height:100vh;padding:14px clamp(16px,2.4vw,38px) 28px;background:#0b0c0e;color:#eeeae3;font-family:"Manrope",ui-sans-serif,system-ui,sans-serif;overflow:auto}
+        .tv-header{display:flex;align-items:center;gap:22px;min-height:88px;margin-bottom:38px}
+        .tv-brand-mark{display:grid;place-items:center;flex:0 0 72px;width:72px;height:72px;border-radius:18px;color:#0b0c0e;background:linear-gradient(135deg,#edc56f,#c58d3b)}
+        .tv-brand strong{display:block;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(34px,3.3vw,54px);font-weight:800;line-height:.92;letter-spacing:.015em;color:#f2eee7}
+        .tv-brand strong span{color:#e0b251}
+        .tv-brand small{display:block;margin-top:8px;color:#a7a29a;font-size:clamp(13px,1.2vw,20px);font-weight:400}
+        .tv-header-right{display:flex;align-items:center;gap:28px;margin-left:auto}
+        .tv-header-right time{font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(48px,5vw,86px);font-weight:800;line-height:1;color:#e5b34f;font-variant-numeric:tabular-nums}
+        .tv-fullscreen{display:grid;place-items:center;padding:8px;border:0;background:transparent;color:#55565a;cursor:pointer}
+        .tv-fullscreen:hover{color:#e5b34f}
+        .tv-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(360px,1fr);gap:clamp(22px,2vw,36px);align-items:start}
+        .tv-agenda h1{margin:0 0 18px;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(24px,2vw,36px);font-weight:700;color:#b9b1a3}
+        .tv-appointment-list{display:flex;flex-direction:column;gap:13px}
+        .tv-appointment{display:flex;align-items:center;gap:clamp(15px,2vw,35px);min-height:110px;padding:16px 27px;border:1px solid #2b2c2f;border-radius:23px;background:#17181a}
+        .tv-appointment.is-muted{background:#111214;border-color:#202123;color:#858585}
+        .tv-appointment-time{flex:0 0 160px;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(35px,3.4vw,58px);font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+        .tv-appointment-info{display:flex;flex:1;flex-direction:column;gap:3px;min-width:0}
+        .tv-appointment-info strong{font-size:clamp(17px,1.8vw,31px);font-weight:600;line-height:1.2;overflow-wrap:anywhere}
+        .tv-appointment-info span{color:#aaa49b;font-size:clamp(12px,1.2vw,21px)}
+        .tv-status{flex:0 0 auto;padding:10px 18px;border:1px solid transparent;border-radius:30px;font-size:clamp(12px,1.1vw,20px);font-weight:600;white-space:nowrap}
+        .tv-status.is-completed{color:#36734f;border-color:#1d3b2a;background:#17251d}
+        .tv-status.is-confirmed{color:#e6b04e;border-color:#6d5225;background:#342b1d}
+        .tv-status.is-cancelled{color:#c87979;border-color:#573232;background:#2a1c1c}
+        .tv-panel{padding:26px 28px 28px;border:1px solid;border-radius:23px;background:#17181a}
+        .tv-panel h2{margin:0 0 20px;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(24px,1.8vw,34px);font-weight:700}
+        .tv-next-panel{border-color:#5c4827}
+        .tv-next-panel h2{color:#e3ad4a}
+        .tv-panel p{margin:0;color:#aaa49b;font-size:clamp(16px,1.45vw,26px)}
+        .tv-next-list{display:flex;flex-direction:column;gap:14px}
+        .tv-next-item{display:flex;gap:20px;align-items:center;color:#e4dfd6;font-size:clamp(14px,1.2vw,20px)}
+        .tv-next-item time{font-family:"Big Shoulders Display",Impact,sans-serif;color:#e5b34f;font-size:1.35em}
+        .tv-free-panel{margin-top:30px;border-color:#28543c}
+        .tv-free-panel h2{color:#4caf77}
+        .tv-free-slots{display:flex;flex-wrap:wrap;gap:12px}
+        .tv-free-slots span{padding:10px 18px;border-radius:18px;background:#203128;color:#55bd80;font-family:"Big Shoulders Display",Impact,sans-serif;font-size:clamp(20px,1.8vw,31px);font-weight:700}
+        .tv-empty{padding:30px;border:1px solid #2b2c2f;border-radius:22px;color:#aaa49b;background:#17181a;font-size:20px}
+        @media(max-width:1000px){.tv-layout{grid-template-columns:1fr}.tv-sidebar{display:grid;grid-template-columns:1fr 1fr;gap:18px}.tv-free-panel{margin-top:0}.tv-appointment-time{flex-basis:115px}}
+        @media(max-width:650px){.tv-screen{padding:12px}.tv-header{gap:12px;margin-bottom:25px}.tv-brand-mark{flex-basis:48px;width:48px;height:48px;border-radius:13px}.tv-brand-mark svg{width:24px}.tv-brand strong{font-size:28px}.tv-brand small{font-size:11px}.tv-header-right{gap:6px}.tv-header-right time{font-size:36px}.tv-fullscreen svg{width:17px}.tv-sidebar{display:flex;flex-direction:column}.tv-free-panel{margin-top:0}.tv-appointment{gap:10px;min-height:80px;padding:12px;border-radius:16px;flex-wrap:wrap}.tv-appointment-time{flex-basis:70px;font-size:34px}.tv-appointment-info{min-width:calc(100% - 90px)}.tv-appointment-info strong{font-size:15px}.tv-appointment-info span{font-size:11px}.tv-status{margin-left:80px;padding:6px 10px;font-size:11px}.tv-panel{padding:20px;border-radius:17px}}
       `}</style>
     </main>
   );
