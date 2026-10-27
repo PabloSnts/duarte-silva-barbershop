@@ -12,7 +12,7 @@ export const Route = createFileRoute("/")({ component: Index });
 type Section = "Início" | "Agenda" | "Agendamentos" | "Clientes" | "Serviços" | "Blacklist" | "Configurações";
 type Appointment = {
   id: number; name: string; phone: string; service: string; time: string;
-  duration: number; status: "Confirmado" | "Aguardando" | "Concluído"; price: number;
+  duration: number; status: "Confirmado" | "Aguardando" | "Concluído"; price: number; date?: string;
 };
 
 const initialAppointments: Appointment[] = [
@@ -52,7 +52,7 @@ function Index() {
   const [booking, setBooking] = useState({ name: "", phone: "", date: "2026-10-27", time: "16:00", serviceNames: ["Corte de cabelo"] as string[] });
   const [blocked, setBlocked] = useState<{ name: string; phone: string; reason: string; date: string }[]>(() => { try { const saved = localStorage.getItem("barbearia-store-v1"); const parsed = saved ? JSON.parse(saved) : null; if (Array.isArray(parsed?.blocked)) return parsed.blocked; } catch {} return [
     { name: "Contato bloqueado", phone: "(31) 90000-0000", reason: "Solicitação do responsável", date: "12/10/2026" },
-  ]);
+  ]; });
   const [blockForm, setBlockForm] = useState({ name: "", phone: "", reason: "" });
   const [tvNameFormat, setTvNameFormat] = useState("Nome - Serviços");
   const [workDays, setWorkDays] = useState<string[]>(() => { try { const saved = localStorage.getItem("barbearia-store-v1"); const parsed = saved ? JSON.parse(saved) : null; if (Array.isArray(parsed?.workDays)) return parsed.workDays; } catch {} return ["Seg", "Qua", "Qui", "Sex", "Sáb"]; });
@@ -101,19 +101,19 @@ function Index() {
     const totalDuration = selectedServices.reduce((sum, item) => sum + item.duration, 0);
     const totalPrice = selectedServices.reduce((sum, item) => sum + item.price, 0);
     const serviceLabel = selectedServices.map((item) => item.name).join(" + ");
-    const [hour, minute] = booking.time.split(":").map(Number);
+    const [hour = 0, minute = 0] = booking.time.split(":").map(Number);
     const startMinute = hour * 60 + minute;
     const endMinute = startMinute + totalDuration;
     const end = `${String(Math.floor(endMinute / 60)).padStart(2, "0")}:${String(endMinute % 60).padStart(2, "0")}`;
     const weekdayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-    const bookingWeekday = weekdayLabels[new Date(`${booking.date}T12:00:00`).getDay()];
+    const bookingWeekday = weekdayLabels[new Date(`${booking.date}T12:00:00`).getDay()] ?? "";
     if (vacations.some((period) => booking.date >= period.start && booking.date <= period.end)) { showNotice("A barbearia estará fechada durante o período de férias cadastrado."); return; }
     if (!workDays.includes(bookingWeekday)) { showNotice(`A barbearia não atende às ${bookingWeekday}.`); return; }
     if (minute % 30 !== 0) { showNotice("Escolha um horário em intervalos de 30 minutos."); return; }
     if (startMinute < 8 * 60 || endMinute > 20 * 60) { showNotice("O atendimento precisa acontecer entre 08:00 e 20:00."); return; }
     if (startMinute < 13 * 60 && endMinute > 12 * 60) { showNotice("O atendimento não pode atravessar o intervalo de almoço (12:00–13:00)."); return; }
     const overlaps = appointments.some((a) => {
-      const [h, m] = a.time.split(":").map(Number);
+      const [h = 0, m = 0] = a.time.split(":").map(Number);
       const start = h * 60 + m;
       return (a.date ?? "2026-10-27") === booking.date && start < endMinute && start + a.duration > startMinute;
     });
@@ -124,7 +124,7 @@ function Index() {
     setAppointments((current) => [...current, {
       id: Math.max(0, ...current.map((a) => a.id)) + 1, name: booking.name.trim(),
       phone: booking.phone, service: serviceLabel, time: booking.time,
-      duration: totalDuration, status: "Confirmado", price: totalPrice,
+      duration: totalDuration, status: "Confirmado" as const, price: totalPrice, date: booking.date,
     }].sort((a, b) => a.time.localeCompare(b.time)));
     setShowBooking(false);
     setBooking({ name: "", phone: "", date: "2026-10-27", time: "16:00", serviceNames: ["Corte de cabelo"] });
@@ -139,7 +139,7 @@ function Index() {
     }
     setAppointments((current) => current.map((a) => {
       if (a.time < delayFrom) return a;
-      const [h, m] = a.time.split(":").map(Number);
+      const [h = 0, m = 0] = a.time.split(":").map(Number);
       const total = Math.max(0, h * 60 + m + offset);
       return { ...a, time: `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}` };
     }).sort((a, b) => a.time.localeCompare(b.time)));
@@ -256,8 +256,7 @@ function Appointments({ appointments, search, setSearch, onBook, setAppointments
 
 function Clients({ appointments, search, setSearch }: { appointments: Appointment[]; search: string; setSearch: (v: string) => void }) {
   const clients = Array.from(new Map(appointments.map((a) => [a.phone, { name: a.name, phone: a.phone, visits: appointments.filter((x) => x.phone === a.phone).length, last: a.time }])).values()).filter((c) => `${c.name} ${c.phone}`.toLowerCase().includes(search.toLowerCase()));
-  return <><PageHeading eyebrow="RELACIONAMENTO" title="Clientes" description="Cadastro, contatos e histórico de atendimentos." action={<button className="button button-primary" onClick={() => window.alert("Cadastro persistente de clientes será ligado ao Supabase na próxima etapa.")}><Plus size={17} /> Novo cliente</button>} /><div className="panel table-panel"><div className="table-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nome ou telefone..." /></div><span className="subtle-count">{clients.length} clientes</span></div><div className="table-scroll"><table><thead><tr><th>CLIENTE</th><th>TELEFONE</th><th>ATENDIMENTOS</th><th>ÚLTIMO HORÁRIO</th><th>HISTÓRICO</th></tr></thead><tbody>{clients.map((c) => <tr key={c.phone}><td><div className="client-cell"><div className="person-avatar">{c.name.split(" ").slice(0, 2).map((n) => n[0]).join("")}</div><strong>{c.name}</strong></div></td><td>{c.phone}</td><td>{c.visits}</td><td>Hoje · {c.last}</td><td><button className="text-action" onClick={() => window.alert(appointments.filter((a) => a.phone === c.phone).map((a) => `${a.time} — ${a.service} — R$ ${a.price}`).join("
-"))}>Ver histórico <ArrowUpRight size={14} /></button></td></tr>)}</tbody></table></div></div></>;
+  return <><PageHeading eyebrow="RELACIONAMENTO" title="Clientes" description="Cadastro, contatos e histórico de atendimentos." action={<button className="button button-primary" onClick={() => window.alert("Cadastro persistente de clientes será ligado ao Supabase na próxima etapa.")}><Plus size={17} /> Novo cliente</button>} /><div className="panel table-panel"><div className="table-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nome ou telefone..." /></div><span className="subtle-count">{clients.length} clientes</span></div><div className="table-scroll"><table><thead><tr><th>CLIENTE</th><th>TELEFONE</th><th>ATENDIMENTOS</th><th>ÚLTIMO HORÁRIO</th><th>HISTÓRICO</th></tr></thead><tbody>{clients.map((c) => <tr key={c.phone}><td><div className="client-cell"><div className="person-avatar">{c.name.split(" ").slice(0, 2).map((n) => n[0]).join("")}</div><strong>{c.name}</strong></div></td><td>{c.phone}</td><td>{c.visits}</td><td>Hoje · {c.last}</td><td><button className="text-action" onClick={() => window.alert(appointments.filter((a) => a.phone === c.phone).map((a) => `${a.time} — ${a.service} — R$ ${a.price}`).join("\n"))}>Ver histórico <ArrowUpRight size={14} /></button></td></tr>)}</tbody></table></div></div></>;
 }
 
 function Services() {
