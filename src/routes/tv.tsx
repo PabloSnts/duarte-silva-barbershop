@@ -31,8 +31,13 @@ function TvDisplay() {
       const [y = 1970, m = 1, d = 1] = currentDate.split("-").map(Number);
       const nextDate = new Date(y, m - 1, d, 12, 0, 0);
       if (view === "Semana") nextDate.setDate(nextDate.getDate() + offset * 7);
-      else if (view === "Mês") nextDate.setMonth(nextDate.getMonth() + offset);
-      else nextDate.setDate(nextDate.getDate() + offset);
+      else if (view === "Mês") {
+        const originalDay = nextDate.getDate();
+        nextDate.setDate(1);
+        nextDate.setMonth(nextDate.getMonth() + offset);
+        const lastDay = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
+        nextDate.setDate(Math.min(originalDay, lastDay));
+      } else nextDate.setDate(nextDate.getDate() + offset);
       return localDateKey(nextDate);
     });
   };
@@ -89,7 +94,7 @@ function TvDisplay() {
       })
       .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? "") || a.time.localeCompare(b.time));
   }, [store, now, selectedDate, view]);
-  const selectedDayAppointments = appointments.filter((item) => (item.date ?? localDateKey(now)).slice(0,10) === selectedDate);
+  const selectedDayAppointments = appointments.filter((item) => (typeof item.date === "string" && item.date.length >= 10 ? item.date.slice(0, 10) : localDateKey(now)) === selectedDate);
 
   const upcoming = appointments.filter((item) => {
     const status = item.status.toLowerCase();
