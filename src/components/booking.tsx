@@ -26,6 +26,7 @@ import {
   bookingServiceIds,
   checkAvailability,
   daySlots,
+  deleteBooking,
   endOf,
   fmtDuration,
   isBlocked,
@@ -219,6 +220,7 @@ export function Confirm({ open, onOpenChange, title, text, onConfirm, danger }: 
 
 export function BookingActions({ booking, onEdit, onDetails }: { booking: Booking; onEdit: () => void; onDetails?: () => void }) {
   const [cancel, setCancel] = useState(false);
+  const [remove, setRemove] = useState(false);
   const closed = booking.status !== "confirmada";
   return (
     <>
@@ -233,6 +235,7 @@ export function BookingActions({ booking, onEdit, onDetails }: { booking: Bookin
           <DropdownMenuItem disabled={closed} onClick={() => { setStatus(booking.id, "ausente"); toast("Cliente marcado como ausente"); }}>Marcar como ausente</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem disabled={booking.status === "cancelada"} className="text-destructive" onClick={() => setCancel(true)}>Cancelar reserva</DropdownMenuItem>
+          <DropdownMenuItem className="text-destructive" onClick={() => setRemove(true)}>Excluir reserva</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <Confirm
@@ -242,6 +245,14 @@ export function BookingActions({ booking, onEdit, onDetails }: { booking: Bookin
         title="Cancelar reserva?"
         text={`A reserva de ${booking.client} às ${booking.start} será cancelada e o horário ficará livre.`}
         onConfirm={() => { setStatus(booking.id, "cancelada"); toast("Reserva cancelada"); }}
+      />
+      <Confirm
+        open={remove}
+        onOpenChange={setRemove}
+        danger
+        title="Excluir reserva permanentemente?"
+        text={`A reserva de ${booking.client}, dia ${booking.date.split("-").reverse().join("/")} às ${booking.start}, será retirada da agenda. Esta ação não pode ser desfeita.`}
+        onConfirm={() => { deleteBooking(booking.id); toast.success("Reserva excluída"); }}
       />
     </>
   );
