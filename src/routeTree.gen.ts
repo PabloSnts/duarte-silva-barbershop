@@ -10,11 +10,59 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AgendaRouteImport } from './routes/agenda'
+import { Route as BlacklistRouteImport } from './routes/blacklist'
+import { Route as ClientesRouteImport } from './routes/clientes'
+import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as ExpedienteRouteImport } from './routes/expediente'
+import { Route as PainelTvRouteImport } from './routes/painel-tv'
+import { Route as ReservasRouteImport } from './routes/reservas'
+import { Route as ServicosRouteImport } from './routes/servicos'
 import { Route as TvRouteImport } from './routes/tv'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgendaRoute = AgendaRouteImport.update({
+  id: '/agenda',
+  path: '/agenda',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BlacklistRoute = BlacklistRouteImport.update({
+  id: '/blacklist',
+  path: '/blacklist',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClientesRoute = ClientesRouteImport.update({
+  id: '/clientes',
+  path: '/clientes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
+  id: '/configuracoes',
+  path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExpedienteRoute = ExpedienteRouteImport.update({
+  id: '/expediente',
+  path: '/expediente',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PainelTvRoute = PainelTvRouteImport.update({
+  id: '/painel-tv',
+  path: '/painel-tv',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReservasRoute = ReservasRouteImport.update({
+  id: '/reservas',
+  path: '/reservas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServicosRoute = ServicosRouteImport.update({
+  id: '/servicos',
+  path: '/servicos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TvRoute = TvRouteImport.update({
@@ -25,27 +73,90 @@ const TvRoute = TvRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agenda': typeof AgendaRoute
+  '/blacklist': typeof BlacklistRoute
+  '/clientes': typeof ClientesRoute
+  '/configuracoes': typeof ConfiguracoesRoute
+  '/expediente': typeof ExpedienteRoute
+  '/painel-tv': typeof PainelTvRoute
+  '/reservas': typeof ReservasRoute
+  '/servicos': typeof ServicosRoute
   '/tv': typeof TvRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agenda': typeof AgendaRoute
+  '/blacklist': typeof BlacklistRoute
+  '/clientes': typeof ClientesRoute
+  '/configuracoes': typeof ConfiguracoesRoute
+  '/expediente': typeof ExpedienteRoute
+  '/painel-tv': typeof PainelTvRoute
+  '/reservas': typeof ReservasRoute
+  '/servicos': typeof ServicosRoute
   '/tv': typeof TvRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agenda': typeof AgendaRoute
+  '/blacklist': typeof BlacklistRoute
+  '/clientes': typeof ClientesRoute
+  '/configuracoes': typeof ConfiguracoesRoute
+  '/expediente': typeof ExpedienteRoute
+  '/painel-tv': typeof PainelTvRoute
+  '/reservas': typeof ReservasRoute
+  '/servicos': typeof ServicosRoute
   '/tv': typeof TvRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/tv'
+  fullPaths:
+    | '/'
+    | '/agenda'
+    | '/blacklist'
+    | '/clientes'
+    | '/configuracoes'
+    | '/expediente'
+    | '/painel-tv'
+    | '/reservas'
+    | '/servicos'
+    | '/tv'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/tv'
-  id: '__root__' | '/' | '/tv'
+  to:
+    | '/'
+    | '/agenda'
+    | '/blacklist'
+    | '/clientes'
+    | '/configuracoes'
+    | '/expediente'
+    | '/painel-tv'
+    | '/reservas'
+    | '/servicos'
+    | '/tv'
+  id:
+    | '__root__'
+    | '/'
+    | '/agenda'
+    | '/blacklist'
+    | '/clientes'
+    | '/configuracoes'
+    | '/expediente'
+    | '/painel-tv'
+    | '/reservas'
+    | '/servicos'
+    | '/tv'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgendaRoute: typeof AgendaRoute
+  BlacklistRoute: typeof BlacklistRoute
+  ClientesRoute: typeof ClientesRoute
+  ConfiguracoesRoute: typeof ConfiguracoesRoute
+  ExpedienteRoute: typeof ExpedienteRoute
+  PainelTvRoute: typeof PainelTvRoute
+  ReservasRoute: typeof ReservasRoute
+  ServicosRoute: typeof ServicosRoute
   TvRoute: typeof TvRoute
 }
 
@@ -56,6 +167,62 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agenda': {
+      id: '/agenda'
+      path: '/agenda'
+      fullPath: '/agenda'
+      preLoaderRoute: typeof AgendaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/blacklist': {
+      id: '/blacklist'
+      path: '/blacklist'
+      fullPath: '/blacklist'
+      preLoaderRoute: typeof BlacklistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/clientes': {
+      id: '/clientes'
+      path: '/clientes'
+      fullPath: '/clientes'
+      preLoaderRoute: typeof ClientesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/configuracoes': {
+      id: '/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/configuracoes'
+      preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/expediente': {
+      id: '/expediente'
+      path: '/expediente'
+      fullPath: '/expediente'
+      preLoaderRoute: typeof ExpedienteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/painel-tv': {
+      id: '/painel-tv'
+      path: '/painel-tv'
+      fullPath: '/painel-tv'
+      preLoaderRoute: typeof PainelTvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reservas': {
+      id: '/reservas'
+      path: '/reservas'
+      fullPath: '/reservas'
+      preLoaderRoute: typeof ReservasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/servicos': {
+      id: '/servicos'
+      path: '/servicos'
+      fullPath: '/servicos'
+      preLoaderRoute: typeof ServicosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tv': {
@@ -70,6 +237,14 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgendaRoute: AgendaRoute,
+  BlacklistRoute: BlacklistRoute,
+  ClientesRoute: ClientesRoute,
+  ConfiguracoesRoute: ConfiguracoesRoute,
+  ExpedienteRoute: ExpedienteRoute,
+  PainelTvRoute: PainelTvRoute,
+  ReservasRoute: ReservasRoute,
+  ServicosRoute: ServicosRoute,
   TvRoute: TvRoute,
 }
 export const routeTree = rootRouteImport
