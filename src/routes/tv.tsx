@@ -17,7 +17,12 @@ function TvDisplay() {
   const queue = useMemo(() => { const today = new Date().toISOString().slice(0, 10); const appointments = (store.appointments ?? []).filter((item) => !item.date || item.date === today).sort((a, b) => a.time.localeCompare(b.time)); if (!appointments.length) return fallbackQueue; return appointments.map((item, index) => ({ name: store.tvNameFormat === "Iniciais" ? item.name.split(/\\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() : store.tvNameFormat === "Primeiro nome" ? item.name.split(/\\s+/)[0] : store.tvNameFormat === "Nome e sobrenome" ? item.name.split(/\\s+/).slice(0, 2).join(" ") : `${item.name} — ${item.service}`, time: item.time, status: index === 0 ? "PRÓXIMO" : "AGENDADO", active: false })); }, [store]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(timer);
+    const channel = new BroadcastChannel("barbearia-store-v1");
+    const refresh = () => { try { const raw = localStorage.getItem("barbearia-store-v1"); if (raw) setStore(JSON.parse(raw)); } catch {} };
+    channel.addEventListener("message", refresh);
+    window.addEventListener("storage", refresh);
+    refresh();
+    return () => { window.clearInterval(timer); channel.removeEventListener("message", refresh); window.removeEventListener("storage", refresh); channel.close(); };
   }, []);
 
   return (
