@@ -63,13 +63,15 @@ function TvDisplay() {
   const appointments = useMemo(() => {
     const today = localDateKey(now);
     return (store.appointments ?? [])
-      .filter((item) => !item.date || item.date === today)
+      .filter((item) => item.date ? item.date === selectedDate : selectedDate === today)
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [store, now, selectedDate]);
 
   const upcoming = appointments.filter((item) => {
     const status = item.status.toLowerCase();
-    return !status.includes("conclu") && !status.includes("cancel") && item.time >= now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", hour12: false });
+    const isToday = selectedDate === localDateKey(now);
+    const currentTime = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", hour12: false });
+    return !status.includes("conclu") && !status.includes("cancel") && (!isToday || item.time >= currentTime);
   });
 
   const freeSlots = useMemo(() => {
@@ -106,7 +108,9 @@ function TvDisplay() {
     } catch {}
   };
 
-  const formatDate = now.toLocaleDateString("pt-BR", {
+  const [selectedYear = 1970, selectedMonth = 1, selectedDay = 1] = selectedDate.split("-").map(Number);
+  const selectedDateObject = new Date(selectedYear, selectedMonth - 1, selectedDay);
+  const formatDate = selectedDateObject.toLocaleDateString("pt-BR", {
     weekday: "long",
     day: "2-digit",
     month: "long",
@@ -158,7 +162,7 @@ function TvDisplay() {
               })}
             </div>
           ) : (
-            <div className="tv-empty">Nenhum agendamento para hoje.</div>
+            <div className="tv-empty">Nenhum agendamento para {selectedDate === localDateKey(now) ? "hoje" : "este dia"}.</div>
           )}
         </section>
 
