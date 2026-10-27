@@ -101,13 +101,29 @@ function Index() {
     const totalDuration = selectedServices.reduce((sum, item) => sum + item.duration, 0);
     const totalPrice = selectedServices.reduce((sum, item) => sum + item.price, 0);
     const serviceLabel = selectedServices.map((item) => item.name).join(" + ");
-    const [hour = 0, minute = 0] = booking.time.split(":").map(Number);
+    const selectedDate = typeof booking.date === "string" ? booking.date.trim() : "";
+    const selectedTime = typeof booking.time === "string" ? booking.time.trim() : "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate) || Number.isNaN(new Date(`${selectedDate}T12:00:00`).getTime())) {
+      showNotice("Selecione uma data válida para a reserva.");
+      return;
+    }
+    const timeMatch = /^(\d{2}):(\d{2})$/.exec(selectedTime);
+    if (!timeMatch) {
+      showNotice("Selecione um horário válido.");
+      return;
+    }
+    const hour = Number(timeMatch[1]);
+    const minute = Number(timeMatch[2]);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      showNotice("Selecione um horário válido.");
+      return;
+    }
     const startMinute = hour * 60 + minute;
     const endMinute = startMinute + totalDuration;
     const end = `${String(Math.floor(endMinute / 60)).padStart(2, "0")}:${String(endMinute % 60).padStart(2, "0")}`;
     const weekdayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-    const bookingWeekday = weekdayLabels[new Date(`${booking.date}T12:00:00`).getDay()] ?? "";
-    if (vacations.some((period) => booking.date >= period.start && booking.date <= period.end)) { showNotice("A barbearia estará fechada durante o período de férias cadastrado."); return; }
+    const bookingWeekday = weekdayLabels[new Date(`${selectedDate}T12:00:00`).getDay()] ?? "";
+    if (vacations.some((period) => selectedDate >= period.start && selectedDate <= period.end)) { showNotice("A barbearia estará fechada durante o período de férias cadastrado."); return; }
     if (!workDays.includes(bookingWeekday)) { showNotice(`A barbearia não atende às ${bookingWeekday}.`); return; }
     if (minute % 30 !== 0) { showNotice("Escolha um horário em intervalos de 30 minutos."); return; }
     if (startMinute < 8 * 60 || endMinute > 20 * 60) { showNotice("O atendimento precisa acontecer entre 08:00 e 20:00."); return; }
@@ -115,7 +131,7 @@ function Index() {
     const overlaps = appointments.some((a) => {
       const [h = 0, m = 0] = a.time.split(":").map(Number);
       const start = h * 60 + m;
-      return (a.date ?? "2026-10-27") === booking.date && start < endMinute && start + a.duration > startMinute;
+      return (a.date ?? "2026-10-27") === selectedDate && start < endMinute && start + a.duration > startMinute;
     });
     if (overlaps) {
       showNotice("Conflito de horário: este intervalo já possui uma reserva.");
@@ -123,8 +139,8 @@ function Index() {
     }
     setAppointments((current) => [...current, {
       id: Math.max(0, ...current.map((a) => a.id)) + 1, name: booking.name.trim(),
-      phone: booking.phone, service: serviceLabel, time: booking.time,
-      duration: totalDuration, status: "Confirmado" as const, price: totalPrice, date: booking.date,
+      phone: booking.phone, service: serviceLabel, time: selectedTime,
+      duration: totalDuration, status: "Confirmado" as const, price: totalPrice, date: selectedDate,
     }].sort((a, b) => a.time.localeCompare(b.time)));
     setShowBooking(false);
     setBooking({ name: "", phone: "", date: "2026-10-27", time: "16:00", serviceNames: ["Corte de cabelo"] });
