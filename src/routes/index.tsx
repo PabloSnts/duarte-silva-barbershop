@@ -276,7 +276,64 @@ function Clients({ appointments, search, setSearch }: { appointments: Appointmen
 }
 
 function Services() {
-  return <><PageHeading eyebrow="CATÁLOGO" title="Serviços" description="Preços, duração e disponibilidade por serviço." action={<button className="button button-primary" onClick={() => window.alert("O cadastro de serviços será integrado ao Supabase existente na próxima etapa.")}><Plus size={17} /> Novo serviço</button>} /><div className="service-grid">{services.map((s) => <article className="service-card" key={s.name}><div className="service-icon"><Scissors size={20} /></div><span className="service-category">{s.category}</span><h3>{s.name}</h3><div className="service-price">R$ {s.price},00</div><div className="service-meta"><span><Clock3 size={15} /> {s.duration} minutos</span><span><CalendarDays size={15} /> Conforme agenda</span></div><div className="service-card-footer"><span className="service-active"><i /> Ativo</span><button className="button button-secondary button-small" onClick={() => window.alert("A edição será habilitada junto à persistência dos serviços.")}>Editar</button></div></article>)}</div><div className="info-banner"><CircleAlert size={17} /><p>Os serviços exibidos são exemplos para visualizar a interface. Preços, regras de disponibilidade e duração serão lidos do Supabase existente quando a integração for configurada.</p></div></>;
+  type ServiceItem = { name: string; duration: number; price: number; category: string; active: boolean };
+  const defaultServices: ServiceItem[] = [
+    { name: "Corte de cabelo", duration: 30, price: 35, category: "Cabelo", active: true },
+    { name: "Corte infantil", duration: 30, price: 35, category: "Cabelo", active: true },
+    { name: "Barba", duration: 30, price: 35, category: "Barba", active: true },
+    { name: "Prótese capilar", duration: 60, price: 120, category: "Especial", active: true },
+    { name: "Manutenção de prótese", duration: 30, price: 60, category: "Especial", active: true },
+  ];
+  const [items, setItems] = useState<ServiceItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("barbearia-services-v1");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return defaultServices;
+  });
+  const [editing, setEditing] = useState<number | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<ServiceItem>({ name: "", duration: 30, price: 0, category: "Cabelo", active: true });
+  const [feedback, setFeedback] = useState("");
+  const persist = (next: ServiceItem[]) => {
+    setItems(next);
+    localStorage.setItem("barbearia-services-v1", JSON.stringify(next));
+  };
+  const openNew = () => {
+    setEditing(null);
+    setForm({ name: "", duration: 30, price: 0, category: "Cabelo", active: true });
+    setShowForm(true);
+  };
+  const openEdit = (index: number) => {
+    setEditing(index);
+    setForm({ ...items[index] });
+    setShowForm(true);
+  };
+  const save = () => {
+    if (!form.name.trim()) { setFeedback("Informe o nome do serviço."); return; }
+    if (!Number.isFinite(form.price) || form.price < 0) { setFeedback("Informe um preço válido."); return; }
+    if (!Number.isFinite(form.duration) || form.duration < 5) { setFeedback("A duração mínima é de 5 minutos."); return; }
+    const normalized = { ...form, name: form.name.trim(), price: Math.round(form.price * 100) / 100 };
+    const next = editing === null ? [...items, normalized] : items.map((item, index) => index === editing ? normalized : item);
+    persist(next);
+    setShowForm(false);
+    setFeedback(editing === null ? "Serviço cadastrado neste navegador." : "Serviço atualizado neste navegador.");
+  };
+  const remove = (index: number) => {
+    if (!window.confirm(`Excluir o serviço "${items[index].name}"?`)) return;
+    persist(items.filter((_, itemIndex) => itemIndex !== index));
+    setFeedback("Serviço excluído.");
+  };
+  return <>
+    <PageHeading eyebrow="CATÁLOGO" title="Serviços" description="Edite preços, duração e disponibilidade dos serviços." action={<button className="button button-primary" onClick={openNew}><Plus size={17} /> Novo serviço</button>} />
+    {feedback && <div className="info-banner"><Check size={17} /><p>{feedback}</p><button className="text-action" onClick={() => setFeedback("")}>Fechar</button></div>}
+    <div className="service-grid">{items.map((s, index) => <article className="service-card" key={`${s.name}-${index}`}><div className="service-icon"><Scissors size={20} /></div><span className="service-category">{s.category}</span><h3>{s.name}</h3><div className="service-price">{s.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</div><div className="service-meta"><span><Clock3 size={15} /> {s.duration} minutos</span><span><CalendarDays size={15} /> Conforme agenda</span></div><div className="service-card-footer"><span className="service-active" style={{ opacity: s.active ? 1 : 0.55 }}><i /> {s.active ? "Ativo" : "Inativo"}</span><div style={{ display: "flex", gap: 8 }}><button className="button button-secondary button-small" onClick={() => openEdit(index)}>Editar</button><button className="button button-secondary button-small" onClick={() => remove(index)} aria-label={`Excluir ${s.name}`}><Trash2 size={14} /></button></div></div></article>)}</div>
+    {items.length === 0 && <div className="empty-state"><Scissors size={24} /><strong>Nenhum serviço cadastrado</strong><span>Use “Novo serviço” para adicionar o primeiro.</span></div>}
+    {showForm && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowForm(false); }}><section className="booking-modal service-editor"><div className="modal-heading"><div><span className="eyebrow">CATÁLOGO DE SERVIÇOS</span><h2>{editing === null ? "Novo serviço" : "Editar serviço"}</h2><p>As alterações ficam salvas neste navegador para teste.</p></div><button className="icon-button" onClick={() => setShowForm(false)} aria-label="Fechar"><X size={19} /></button></div><div className="form-grid"><label className="field full-field">Nome do serviço<input autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex.: Corte degradê" /></label><label className="field">Categoria<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}><option>Cabelo</option><option>Barba</option><option>Especial</option><option>Outros</option></select></label><label className="field">Duração (minutos)<input type="number" min="5" step="5" value={form.duration} onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })} /></label><label className="field">Preço (R$)<input type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></label><label className="field">Disponibilidade<select value={form.active ? "ativo" : "inativo"} onChange={(e) => setForm({ ...form, active: e.target.value === "ativo" })}><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select></label></div><p className="form-note"><CircleAlert size={15} /> Modo demonstração: esses dados são locais e ainda não alteram o Supabase nem o bot do WhatsApp.</p><div className="modal-actions"><button className="button button-secondary" onClick={() => setShowForm(false)}>Cancelar</button><button className="button button-primary" onClick={save}><Check size={16} /> Salvar serviço</button></div></section></div>}
+  </>;
 }
 
 function Blacklist({ blocked, setBlocked, form, setForm, showNotice }: { blocked: { name: string; phone: string; reason: string; date: string }[]; setBlocked: React.Dispatch<React.SetStateAction<{ name: string; phone: string; reason: string; date: string }[]>>; form: { name: string; phone: string; reason: string }; setForm: React.Dispatch<React.SetStateAction<{ name: string; phone: string; reason: string }>>; showNotice: (message: string) => void }) {
