@@ -69,9 +69,11 @@ function TvDisplay() {
   });
 
   const freeSlots = useMemo(() => {
-    const [year, month, date] = selectedDate.split("-").map(Number);\n    const day = new Date(year, month - 1, date).getDay();
+    const [year, month, date] = selectedDate.split("-").map(Number);
+    const day = new Date(year, month - 1, date).getDay();
     if (day === 0 || day === 2) return [];
-    const isToday = selectedDate === localDateKey(now);\n    const currentMinutes = isToday ? now.getHours() * 60 + now.getMinutes() : -1;
+    const isToday = selectedDate === localDateKey(now);
+    const currentMinutes = isToday ? now.getHours() * 60 + now.getMinutes() : -1;
     const busy = appointments
       .filter((item) => !/conclu|cancel/i.test(item.status))
       .map((item) => {
