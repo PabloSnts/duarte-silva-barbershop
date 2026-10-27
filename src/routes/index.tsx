@@ -52,7 +52,7 @@ function Index() {
   const [booking, setBooking] = useState({ name: "", phone: "", date: "2026-10-27", time: "16:00", serviceNames: ["Corte de cabelo"] as string[] });
   const [blocked, setBlocked] = useState<{ name: string; phone: string; reason: string; date: string }[]>(() => { try { const saved = localStorage.getItem("barbearia-store-v1"); const parsed = saved ? JSON.parse(saved) : null; if (Array.isArray(parsed?.blocked)) return parsed.blocked; } catch {} return [
     { name: "Contato bloqueado", phone: "(31) 90000-0000", reason: "Solicitação do responsável", date: "12/10/2026" },
-  ]);
+  ]; });
   const [blockForm, setBlockForm] = useState({ name: "", phone: "", reason: "" });
   const [tvNameFormat, setTvNameFormat] = useState("Nome - Serviços");
   const [workDays, setWorkDays] = useState<string[]>(() => { try { const saved = localStorage.getItem("barbearia-store-v1"); const parsed = saved ? JSON.parse(saved) : null; if (Array.isArray(parsed?.workDays)) return parsed.workDays; } catch {} return ["Seg", "Qua", "Qui", "Sex", "Sáb"]; });
