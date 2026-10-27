@@ -12,7 +12,7 @@ export const Route = createFileRoute("/")({ component: Index });
 type Section = "Início" | "Agenda" | "Agendamentos" | "Clientes" | "Serviços" | "Blacklist" | "Configurações";
 type Appointment = {
   id: number; name: string; phone: string; service: string; time: string;
-  duration: number; status: "Confirmado" | "Aguardando" | "Concluído"; price: number;
+  duration: number; status: "Confirmado" | "Aguardando" | "Concluído"; price: number; date?: string;
 };
 
 const initialAppointments: Appointment[] = [
@@ -101,19 +101,19 @@ function Index() {
     const totalDuration = selectedServices.reduce((sum, item) => sum + item.duration, 0);
     const totalPrice = selectedServices.reduce((sum, item) => sum + item.price, 0);
     const serviceLabel = selectedServices.map((item) => item.name).join(" + ");
-    const [hour, minute] = booking.time.split(":").map(Number);
+    const [hour = 0, minute = 0] = booking.time.split(":").map(Number);
     const startMinute = hour * 60 + minute;
     const endMinute = startMinute + totalDuration;
     const end = `${String(Math.floor(endMinute / 60)).padStart(2, "0")}:${String(endMinute % 60).padStart(2, "0")}`;
     const weekdayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-    const bookingWeekday = weekdayLabels[new Date(`${booking.date}T12:00:00`).getDay()];
+    const bookingWeekday = weekdayLabels[new Date(`${booking.date}T12:00:00`).getDay()] ?? "";
     if (vacations.some((period) => booking.date >= period.start && booking.date <= period.end)) { showNotice("A barbearia estará fechada durante o período de férias cadastrado."); return; }
     if (!workDays.includes(bookingWeekday)) { showNotice(`A barbearia não atende às ${bookingWeekday}.`); return; }
     if (minute % 30 !== 0) { showNotice("Escolha um horário em intervalos de 30 minutos."); return; }
     if (startMinute < 8 * 60 || endMinute > 20 * 60) { showNotice("O atendimento precisa acontecer entre 08:00 e 20:00."); return; }
     if (startMinute < 13 * 60 && endMinute > 12 * 60) { showNotice("O atendimento não pode atravessar o intervalo de almoço (12:00–13:00)."); return; }
     const overlaps = appointments.some((a) => {
-      const [h, m] = a.time.split(":").map(Number);
+      const [h = 0, m = 0] = a.time.split(":").map(Number);
       const start = h * 60 + m;
       return (a.date ?? "2026-10-27") === booking.date && start < endMinute && start + a.duration > startMinute;
     });
@@ -124,7 +124,7 @@ function Index() {
     setAppointments((current) => [...current, {
       id: Math.max(0, ...current.map((a) => a.id)) + 1, name: booking.name.trim(),
       phone: booking.phone, service: serviceLabel, time: booking.time,
-      duration: totalDuration, status: "Confirmado", price: totalPrice,
+      duration: totalDuration, status: "Confirmado" as const, price: totalPrice, date: booking.date,
     }].sort((a, b) => a.time.localeCompare(b.time)));
     setShowBooking(false);
     setBooking({ name: "", phone: "", date: "2026-10-27", time: "16:00", serviceNames: ["Corte de cabelo"] });
