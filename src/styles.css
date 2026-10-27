@@ -102,7 +102,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .date-chip { gap: 8px; padding: 8px 11px; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; color: #b6b5b0; font-size: 11px; }
 .content { max-width: 1600px; margin: 0 auto; padding: 34px 35px 28px; }
 .page-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; margin-bottom: 26px; }
-.page-heading h1 { margin: 9px 0 7px; color: #f3f0e9; font-family: Georgia, "Times New Roman", serif; font-size: clamp(28px,3vw,36px); font-weight: 500; letter-spacing: -.035em; }
+.page-heading h1 { margin: 9px 0 7px; color: #f3f0e9; font-family: "Big Shoulders Display", Impact, sans-serif; font-size: clamp(28px,3vw,36px); font-weight: 500; letter-spacing: -.035em; }
 .page-heading p { margin: 0; color: #929398; font-size: 12px; line-height: 1.65; }
 .eyebrow { color: #c6a94a; font-size: 9px; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 39px; padding: 0 14px; border: 1px solid transparent; border-radius: 8px; font-size: 12px; font-weight: 650; transition: .16s ease; white-space: nowrap; }
@@ -116,7 +116,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .banner-decoration { align-self: flex-start; display: grid; place-items: center; width: 38px; height: 38px; margin-right: 18px; color: #d4af37; background: rgba(212,175,55,.09); border: 1px solid rgba(212,175,55,.17); border-radius: 11px; }
 .banner-copy { flex: 1; }
 .banner-copy>span,.banner-stat small { font-size: 9px; letter-spacing: .15em; color: #c9ad57; font-weight: 700; }
-.banner-copy h2 { margin: 9px 0 7px; font-family: Georgia, "Times New Roman", serif; font-size: 24px; font-weight: 500; letter-spacing: -.02em; }
+.banner-copy h2 { margin: 9px 0 7px; font-family: "Big Shoulders Display", Impact, sans-serif; font-size: 24px; font-weight: 500; letter-spacing: -.02em; }
 .banner-copy p { margin: 0; color: #9b9a94; font-size: 11px; }
 .banner-stat { display: flex; flex-direction: column; gap: 7px; min-width: 180px; padding-left: 25px; border-left: 1px solid rgba(255,255,255,.1); }
 .banner-stat strong { font-family: "Big Shoulders Display", Impact, sans-serif; font-size: 29px; font-weight: 500; color: #e3c85e; }
