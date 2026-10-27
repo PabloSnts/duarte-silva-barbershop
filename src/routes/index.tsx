@@ -89,12 +89,19 @@ function Index() {
     const totalPrice = selectedServices.reduce((sum, item) => sum + item.price, 0);
     const serviceLabel = selectedServices.map((item) => item.name).join(" + ");
     const [hour, minute] = booking.time.split(":").map(Number);
-    const endMinute = hour * 60 + minute + totalDuration;
+    const startMinute = hour * 60 + minute;
+    const endMinute = startMinute + totalDuration;
     const end = `${String(Math.floor(endMinute / 60)).padStart(2, "0")}:${String(endMinute % 60).padStart(2, "0")}`;
+    const weekdayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+    const bookingWeekday = weekdayLabels[new Date(`${booking.date}T12:00:00`).getDay()];
+    if (!workDays.includes(bookingWeekday)) { showNotice(`A barbearia não atende às ${bookingWeekday}.`); return; }
+    if (minute % 30 !== 0) { showNotice("Escolha um horário em intervalos de 30 minutos."); return; }
+    if (startMinute < 8 * 60 || endMinute > 20 * 60) { showNotice("O atendimento precisa acontecer entre 08:00 e 20:00."); return; }
+    if (startMinute < 13 * 60 && endMinute > 12 * 60) { showNotice("O atendimento não pode atravessar o intervalo de almoço (12:00–13:00)."); return; }
     const overlaps = appointments.some((a) => {
       const [h, m] = a.time.split(":").map(Number);
       const start = h * 60 + m;
-      return start < endMinute && start + a.duration > hour * 60 + minute;
+      return start < endMinute && start + a.duration > startMinute;
     });
     if (overlaps) {
       showNotice("Conflito de horário: este intervalo já possui uma reserva.");
