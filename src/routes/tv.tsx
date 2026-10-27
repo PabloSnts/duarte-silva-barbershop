@@ -57,9 +57,8 @@ function TvDisplay() {
   }, []);
 
   const appointments = useMemo(() => {
-    const today = localDateKey(now);
     return (store.appointments ?? [])
-      .filter((item) => !item.date || item.date === today)
+      .filter((item) => item.date === selectedDate || (!item.date && selectedDate === localDateKey(now)))
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [store, now, selectedDate]);
 
@@ -69,9 +68,11 @@ function TvDisplay() {
   });
 
   const freeSlots = useMemo(() => {
-    const [year, month, date] = selectedDate.split("-").map(Number);\n    const day = new Date(year, month - 1, date).getDay();
+    const [year, month, date] = selectedDate.split("-").map(Number);
+    const day = new Date(year, month - 1, date).getDay();
     if (day === 0 || day === 2) return [];
-    const isToday = selectedDate === localDateKey(now);\n    const currentMinutes = isToday ? now.getHours() * 60 + now.getMinutes() : -1;
+    const isToday = selectedDate === localDateKey(now);
+    const currentMinutes = isToday ? now.getHours() * 60 + now.getMinutes() : -1;
     const busy = appointments
       .filter((item) => !/conclu|cancel/i.test(item.status))
       .map((item) => {
