@@ -43,10 +43,11 @@ export type Settings = {
   vacationMessage: string;
 };
 export type TvState = { code: string | null; expires: number; connected: boolean; connectedAt?: number };
-export type State = { loaded: boolean; services: Service[]; bookings: Booking[]; settings: Settings; tv: TvState; blacklist: BlockedClient[]; adjusts: Adjust[]; updatedAt: number };
+export type State = { loaded: boolean; services: Service[]; bookings: Booking[]; settings: Settings; tv: TvState; blacklist: BlockedClient[]; adjusts: Adjust[]; updatedAt: number; demoSeedVersion?: string };
 export type TvEvent = { kind: "nova" | "alterada" | "cancelada"; booking: Booking; at: number };
 
 const KEY = "barbearia-snapshot-v1";
+const DEMO_SEED_VERSION = "oct-nov-2026-v1";
 const defaultSettings: Settings = {
   shopName: "Navalha & Co.",
   open: "09:00",
@@ -80,32 +81,81 @@ const empty: State = {
 
 export const uid = () => Math.random().toString(36).slice(2, 10);
 
-function seed(): Booking[] {
-  const names = ["Rafael Souza", "Lucas Lima", "Bruno Costa", "Diego Alves", "Thiago Rocha", "Mateus Dias", "André Melo", "Felipe Nunes", "Gustavo Reis", "Caio Martins"];
-  const times = ["09:00", "09:30", "10:30", "11:00", "14:00", "15:00", "16:30", "17:30"];
-  const svc = ["corte", "barba", "combo", "corte", "pigmentacao", "corte", "combo", "barba"];
-  const out: Booking[] = [];
-  for (let d = -3; d <= 10; d++) {
-    const date = format(addDays(new Date(), d), "yyyy-MM-dd");
-    const day = addDays(new Date(), d).getDay();
-    if (day === 0) continue;
-    const n = d === 0 ? 7 : 2 + ((d * 7 + 11) % 5);
-    for (let i = 0; i < n; i++) {
-      const status: BookingStatus = d < 0 ? (i % 5 === 3 ? "ausente" : "concluida") : d === 0 && i < 2 ? "concluida" : d === 0 && i === 4 ? "cancelada" : "confirmada";
-      out.push({
-        id: uid(),
-        client: names[(i * 3 + d + 20) % names.length]!,
-        phone: `(11) 9${8000 + i * 37}-${1000 + i * 113}`,
-        serviceId: svc[i % svc.length]!,
+/**
+ * One-time, editable demonstration schedule for October and November 2026.
+ * Respects the user's existing working days, holidays and service restrictions,
+ * deliberately leaves some working days completely free and most others partly free.
+ * No Supabase writes; bookings are persisted only in the local demo store.
+ */
+function seedForOctoberNovember(base: State): Booking[] {
+  const names = [
+    "Rafael Oliveira", "Lucas Ferreira", "André Martins", "Gabriel Souza",
+    "Mateus Costa", "Bruno Almeida", "Felipe Nunes", "Gustavo Ribeiro",
+    "Diego Alves", "Thiago Rocha", "Caio Pereira", "Henrique Lima",
+    "Pedro Carvalho", "Leonardo Gomes", "Vinícius Santos", "Eduardo Barros",
+    "Marcos Silva", "João Victor", "Daniel Moreira", "Igor Barbosa",
+  ];
+  const services = base.services.filter((service) => service.duration > 0);
+  if (!services.length) return [];
+
+  const result: Booking[] = [];
+  let workingIndex = 0;
+  const todayKey = today();
+  const currentTime = new Date();
+  const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+
+  for (let day = new Date(2026, 9, 1); day <= new Date(2026, 10, 30); day = addDays(day, 1)) {
+    const date = format(day, "yyyy-MM-dd");
+    const slots = daySlots(base, date);
+    if (!slots.length) continue; // weekly days off or vacation
+    workingIndex++;
+
+    // Roughly one or two completely free working days per week.
+    if (workingIndex % 6 === 2 || workingIndex % 11 === 7) continue;
+
+    // Not all hours are reserved; allow the user to create bookings manually.
+    const desired = Math.min(Math.max(0, slots.length - 3), 3 + ((workingIndex * 5 + day.getDate()) % 6));
+    if (desired === 0) continue;
+
+    // Spread bookings throughout the morning and afternoon in a repeatable way.
+    const candidates = slots
+      .map((time, i) => ({ time, index: i, rank: (i * 17 + workingIndex * 11) % slots.length }))
+      .sort((a, b) => a.rank - b.rank || a.index - b.index);
+
+    let added = 0;
+    for (const candidate of candidates) {
+      if (added >= desired) break;
+      if ((candidate.index + workingIndex) % 7 === 0) continue;
+
+      const possibleServices = services.map((_, i) => services[(i + workingIndex + added) % services.length]!);
+      const service = possibleServices.find((item) =>
+        checkAvailability({ ...base, bookings: result }, date, candidate.time, [item.id]) === null
+      );
+      if (!service) continue;
+
+      const timeEnd = toMin(candidate.time) + service.duration;
+      const hasPassed = date < todayKey || (date === todayKey && timeEnd <= currentMinutes);
+      const status: BookingStatus = hasPassed
+        ? (workingIndex + added) % 13 === 0 ? "ausente" : "concluida"
+        : "confirmada";
+      const clientIndex = (workingIndex * 3 + added * 7) % names.length;
+
+      result.push({
+        id: `demo-2026-${date}-${candidate.time.replace(":", "")}`,
+        client: names[clientIndex]!,
+        phone: `(31) 90000-${String((workingIndex * 157 + added * 389) % 10000).padStart(4, "0")}`,
+        serviceId: service.id,
         date,
-        start: times[i]!,
+        start: candidate.time,
         status,
         demo: true,
-        createdAt: Date.now(),
+        createdAt: new Date(`${date}T${candidate.time}:00`).getTime(),
       });
+      added++;
     }
   }
-  return out;
+
+  return result.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
 }
 
 let state: State = empty;
@@ -118,9 +168,20 @@ function init() {
   try {
     const raw = localStorage.getItem(KEY);
     const parsed = raw ? JSON.parse(raw) : null;
-    state = parsed ? { ...empty, ...parsed, settings: { ...defaultSettings, ...parsed.settings }, loaded: true } : { ...empty, bookings: seed(), loaded: true, updatedAt: Date.now() };
+    state = parsed ? { ...empty, ...parsed, settings: { ...defaultSettings, ...parsed.settings }, loaded: true } : { ...empty, loaded: true, updatedAt: Date.now() };
   } catch {
-    state = { ...empty, bookings: seed(), loaded: true };
+    state = { ...empty, loaded: true };
+  }
+  if (state.demoSeedVersion !== DEMO_SEED_VERSION) {
+    // Replace all previous demo appointments once, while preserving settings,
+    // services, blackout dates, blacklist and TV preferences.
+    state = {
+      ...state,
+      bookings: seedForOctoberNovember(state),
+      adjusts: [],
+      demoSeedVersion: DEMO_SEED_VERSION,
+      updatedAt: Date.now(),
+    };
   }
   persist();
   if ("BroadcastChannel" in window) {
@@ -317,6 +378,19 @@ export function setStatus(id: string, status: BookingStatus) {
 }
 export function clearDemo() {
   setState((s) => ({ bookings: s.bookings.filter((b) => !b.demo) }));
+}
+
+export function deleteBooking(id: string) {
+  init();
+  const booking = state.bookings.find((b) => b.id === id);
+  if (!booking) return;
+  setState(
+    (s) => ({
+      bookings: s.bookings.filter((b) => b.id !== id),
+      adjusts: s.adjusts.filter((a) => !a.ids.includes(id)),
+    }),
+    { kind: "cancelada", booking, at: Date.now() },
+  );
 }
 
 export function generatePairCode() {
