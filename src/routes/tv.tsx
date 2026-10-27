@@ -25,6 +25,10 @@ function TvDisplay() {
   const [now, setNow] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => localDateKey(new Date()));
+  const changeDate = (offset: number) => {
+    const [y = 1970, m = 1, d = 1] = selectedDate.split("-").map(Number);
+    setSelectedDate(localDateKey(new Date(y, m - 1, d + offset)));
+  };
   const [store, setStore] = useState<{ appointments: TvAppointment[] }>(() => {
     try {
       const raw = localStorage.getItem("barbearia-store-v1");
@@ -57,8 +61,9 @@ function TvDisplay() {
   }, []);
 
   const appointments = useMemo(() => {
+    const today = localDateKey(now);
     return (store.appointments ?? [])
-      .filter((item) => item.date === selectedDate || (!item.date && selectedDate === localDateKey(now)))
+      .filter((item) => !item.date || item.date === today)
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [store, now, selectedDate]);
 
@@ -68,7 +73,7 @@ function TvDisplay() {
   });
 
   const freeSlots = useMemo(() => {
-    const [year, month, date] = selectedDate.split("-").map(Number);
+    const [year = 1970, month = 1, date = 1] = selectedDate.split("-").map(Number);
     const day = new Date(year, month - 1, date).getDay();
     if (day === 0 || day === 2) return [];
     const isToday = selectedDate === localDateKey(now);
@@ -76,7 +81,7 @@ function TvDisplay() {
     const busy = appointments
       .filter((item) => !/conclu|cancel/i.test(item.status))
       .map((item) => {
-        const [hour, minute] = item.time.split(":").map(Number);
+        const [hour = 0, minute = 0] = item.time.split(":").map(Number);
         return { start: hour * 60 + minute, end: hour * 60 + minute + (item.duration || 30) };
       });
     const slots: string[] = [];
@@ -137,7 +142,7 @@ function TvDisplay() {
               {appointments.map((item) => {
                 const completed = /conclu/i.test(item.status);
                 const cancelled = /cancel/i.test(item.status);
-                const [hour, minute] = item.time.split(":").map(Number);
+                const [hour = 0, minute = 0] = item.time.split(":").map(Number);
                 const endMinutes = hour * 60 + minute + (item.duration || 30);
                 const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
                 return (
