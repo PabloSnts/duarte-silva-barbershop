@@ -22,3 +22,10 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## Project development boundaries
+
+- Develop incrementally and preserve the existing Lovable application structure.
+- Connect to the owner's existing Supabase project when requested.
+- Do not create a new Supabase project or database as part of repository changes.
+- Keep credentials and service-role keys out of frontend code and version control.
