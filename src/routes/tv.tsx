@@ -26,10 +26,12 @@ function TvDisplay() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => localDateKey(new Date()));
   const changeDate = (offset: number) => {
-    const [y = 1970, m = 1, d = 1] = selectedDate.split("-").map(Number);
-    const nextDate = new Date(y, m - 1, d);
-    nextDate.setDate(nextDate.getDate() + offset);
-    setSelectedDate(localDateKey(nextDate));
+    setSelectedDate((currentDate) => {
+      const [y = 1970, m = 1, d = 1] = currentDate.split("-").map(Number);
+      const nextDate = new Date(y, m - 1, d, 12, 0, 0);
+      nextDate.setDate(nextDate.getDate() + offset);
+      return localDateKey(nextDate);
+    });
   };
   const [store, setStore] = useState<{ appointments: TvAppointment[] }>(() => {
     try {
