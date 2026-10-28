@@ -3,7 +3,7 @@ import { afterEach,expect,it,vi } from "vitest";
 import type { State } from "@/lib/store";
 
 const transport=vi.hoisted(()=>({api:vi.fn(),auth:vi.fn()}));
-vi.mock("@/lib/remote",()=>({api:transport.api,getAuthClient:()=>({auth:{onAuthStateChange:transport.auth}}),saveTvToken:vi.fn()}));
+vi.mock("@/lib/remote",()=>({api:transport.api,getAuthClient:()=>({auth:{onAuthStateChange:transport.auth,getSession:async()=>({data:{session:{access_token:"t"}}})}}),saveTvToken:vi.fn()}));
 const initial: State={loaded:true,access:"barber",services:[],bookings:[],blacklist:[],adjusts:[],updatedAt:1,
   tv:{code:null,expires:0,connected:false},settings:{shopName:"Antes",open:"09:00",close:"19:00",workDays:[1],breakStart:"",breakEnd:"",slot:30,showFreeOnTv:true,tvClientInfo:"first",sound:false,vacations:[],vacationMessage:""}};
 type Snapshot={state:State;revision:string};

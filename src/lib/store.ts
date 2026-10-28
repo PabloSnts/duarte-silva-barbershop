@@ -142,8 +142,20 @@ export async function refreshStore(reset = false) {
     // so the private snapshot is never requested and never answers 401.
     const signedIn = !!(await getAuthClient().auth.getSession()).data.session;
     const pairedTv = typeof localStorage !== "undefined" && !!localStorage.getItem("barbearia-tv-session-v1");
-    const snapshot = await api(currentPath === "/agendar" || (!signedIn && !pairedTv) ? "catalog" : "snapshot");
-    if (id === generation) accept(snapshot);
+    const wantsPrivate = currentPath !== "/agendar" && (signedIn || pairedTv);
+    try {
+      const snapshot = await api(wantsPrivate ? "snapshot" : "catalog");
+      if (id === generation) accept(snapshot);
+    } catch (error) {
+      // Signed in (or paired) but not authorized by the server: show the public
+      // catalogue with a clear message instead of an empty, broken page.
+      if (!wantsPrivate || (error as {status?: number}).status !== 401) throw error;
+      const snapshot = await api("catalog");
+      if (id !== generation) return;
+      accept(snapshot);
+      state = {...state,error:signedIn ? "Esta conta ainda não está autorizada como barbeiro. Peça para liberar o e-mail na lista de acesso." : "Esta TV não está mais conectada. Gere um novo código."};
+      notify();
+    }
   } catch (error) {
     if (id !== generation) return;
     // Never fall back to stale private data after logout or failed authorization.
