@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { addDays, format } from "date-fns";
 
 /**
@@ -399,9 +399,62 @@ export function upsertBooking(b: Booking, isNew: boolean) {
   });
 }
 export function setStatus(id: string, status: BookingStatus) {
+  init();
   const b = state.bookings.find((x) => x.id === id);
-  if (!b) return;
+  if (!b || b.status === status) return;
   upsertBooking({ ...b, status }, false);
+}
+
+/**
+ * Auto-finish appointments whose effective end time has passed.
+ * Only "confirmada" can change automatically: manually marked
+ * absences, cancellations and completed bookings are never overwritten.
+ *
+ * This runs while a dashboard/TV tab is open and again when returning to it.
+ * In the future this rule can be moved to a server scheduler unchanged.
+ */
+export function completeElapsedBookings(at: Date = new Date()): number {
+  init();
+  if (!state.loaded) return 0;
+  const date = format(at, "yyyy-MM-dd");
+  const minute = at.getHours() * 60 + at.getMinutes();
+  const completed = new Set(
+    state.bookings
+      .filter((booking) =>
+        booking.status === "confirmada" &&
+        (booking.date < date ||
+          (booking.date === date && toMin(endOf(booking, state.services)) <= minute))
+      )
+      .map((booking) => booking.id)
+  );
+  if (!completed.size) return 0;
+  setState((current) => ({
+    bookings: current.bookings.map((booking) =>
+      completed.has(booking.id) && booking.status === "confirmada"
+        ? { ...booking, status: "concluida" }
+        : booking
+    ),
+  }));
+  return completed.size;
+}
+
+/** Synchronize the temporary store on a periodic clock tick and tab refocus. */
+export function useAutoCompleteBookings() {
+  useEffect(() => {
+    const update = () => { completeElapsedBookings(); };
+    update();
+    const timer = window.setInterval(update, 15_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") update();
+    };
+    window.addEventListener("focus", update);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", update);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 }
 export function clearDemo() {
   setState((s) => ({ bookings: s.bookings.filter((b) => !b.demo) }));
