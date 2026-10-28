@@ -1,8 +1,9 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import type { ReactNode } from "react";
-import { Ban, CalendarClock, CalendarDays, CalendarPlus, LayoutDashboard, ListChecks, Scissors, Settings, Tv, Users } from "lucide-react";
-import { clearDemo, useStore } from "@/lib/store";
+import { useState, type ReactNode } from "react";
+import { Ban, CalendarClock, CalendarDays, CalendarPlus, LayoutDashboard, ListChecks, Menu, Scissors, Settings, Tv, Users } from "lucide-react";
+import { clearDemo, useAutoCompleteBookings, useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -17,17 +18,20 @@ const nav = [
   { to: "/agendar", label: "Agendamento cliente", icon: CalendarPlus },
 ] as const;
 
-const mobileNav = [nav[0], nav[1], nav[2], nav[7], nav[8]];
+const mobileNav = [nav[0], nav[1], nav[2], nav[7]];
 
 export function AppShell({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const shop = useStore((s) => s.settings.shopName);
   const hasDemo = useStore((s) => s.bookings.some((b) => b.demo));
   const tvOn = useStore((s) => s.tv.connected);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const menuActive = !mobileNav.some((item) => item.to === "/" ? path === "/" : path.startsWith(item.to));
+  useAutoCompleteBookings();
 
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[250px_1fr]">
-      <aside className="hidden border-r border-sidebar-border bg-sidebar md:flex md:flex-col">
+    <div className="min-h-screen lg:grid lg:grid-cols-[250px_1fr]">
+      <aside className="hidden border-r border-sidebar-border bg-sidebar lg:flex lg:flex-col">
         <div className="flex items-center gap-3 px-6 py-6">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gold text-primary-foreground">
             <Scissors className="h-5 w-5" />
@@ -58,7 +62,7 @@ export function AppShell({ title, actions, children }: { title: string; actions?
         <p className="px-6 py-5 text-xs text-muted-foreground">Reservas recebidas via WhatsApp</p>
       </aside>
 
-      <div className="flex min-w-0 flex-col pb-20 md:pb-0">
+      <div className="flex min-w-0 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0">
         {hasDemo && (
           <div className="flex flex-wrap items-center justify-center gap-3 border-b border-border bg-primary/10 px-4 py-2 text-center text-xs text-primary">
             Exibindo dados de demonstração — não são reservas reais.
@@ -72,16 +76,49 @@ export function AppShell({ title, actions, children }: { title: string; actions?
         <main className="flex-1 px-4 pb-8 md:px-8">{children}</main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-border bg-sidebar/95 backdrop-blur md:hidden">
+      {/* Atalhos principais e menu completo no celular e tablet. */}
+      <nav aria-label="Navegação principal mobile"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-border bg-sidebar/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         {mobileNav.map((n) => {
           const active = n.to === "/" ? path === "/" : path.startsWith(n.to);
           return (
-            <Link key={n.to} to={n.to} className={`flex flex-col items-center gap-1 py-2.5 text-[10px] ${active ? "text-primary" : "text-muted-foreground"}`}>
-              <n.icon className="h-5 w-5" />
-              {n.label === "Visualização na TV" ? "TV" : n.label === "Configurações" ? "Ajustes" : n.label}
+            <Link key={n.to} to={n.to}
+              aria-current={active ? "page" : undefined}
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-3 text-[10px] font-medium transition-colors ${active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+              <n.icon className="h-5 w-5 shrink-0" />
+              <span className="truncate">{n.label === "Visualização na TV" ? "TV" : n.label}</span>
             </Link>
           );
         })}
+        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+          <SheetTrigger asChild>
+            <button type="button" aria-label="Abrir todas as guias" aria-expanded={mobileMenuOpen}
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-3 text-[10px] font-medium transition-colors ${menuActive || mobileMenuOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+              <Menu className="h-5 w-5 shrink-0" />
+              <span>Menu</span>
+            </button>
+          </SheetTrigger>
+          <SheetContent side="left" className="flex h-dvh w-[min(90vw,360px)] flex-col overflow-hidden border-sidebar-border bg-sidebar p-0">
+            <SheetHeader className="shrink-0 border-b border-sidebar-border px-5 py-6 text-left">
+              <SheetTitle className="font-display text-2xl font-bold uppercase">{shop}</SheetTitle>
+              <SheetDescription>Todas as guias do sistema</SheetDescription>
+            </SheetHeader>
+            <nav aria-label="Todas as guias" className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
+              {nav.map((item) => {
+                const active = item.to === "/" ? path === "/" : path.startsWith(item.to);
+                return (
+                  <Link key={item.to} to={item.to} aria-current={active ? "page" : undefined}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex min-h-11 items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${active ? "bg-primary/15 text-primary" : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-foreground"}`}>
+                    <item.icon className="h-5 w-5 shrink-0" />
+                    <span className="min-w-0 flex-1">{item.label}</span>
+                    {active && <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />}
+                  </Link>
+                );
+              })}
+            </nav>
+          </SheetContent>
+        </Sheet>
       </nav>
     </div>
   );
