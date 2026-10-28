@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { z } from "zod";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronDown, XCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -17,6 +19,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MoreHorizontal } from "lucide-react";
@@ -69,11 +73,15 @@ export function BookingDialog({ open, onOpenChange, booking }: { open: boolean; 
   const [form, setForm] = useState<{ client: string; phone: string; serviceIds: string[]; date: string; start: string; notes: string }>({ client: "", phone: "", serviceIds: [], date: today(), start: "", notes: "" });
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [confirm, setConfirm] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
 
   useEffect(() => {
     if (open) {
       setForm(booking ? { client: booking.client, phone: booking.phone, serviceIds: bookingServiceIds(booking), date: booking.date, start: booking.start, notes: booking.notes ?? "" } : { client: "", phone: "", serviceIds: state.services[0] ? [state.services[0].id] : [], date: today(), start: "", notes: "" });
       setErrors({});
+      setCalendarOpen(false);
+      setCalendarMonth(booking ? parseISO(booking.date) : new Date());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, booking]);
@@ -92,6 +100,10 @@ export function BookingDialog({ open, onOpenChange, booking }: { open: boolean; 
     }
     if (blocked) {
       setErrors({ phone: "Cliente na blacklist — não pode agendar" });
+      return;
+    }
+    if (form.date < today()) {
+      setErrors({ date: "Não é possível escolher uma data passada" });
       return;
     }
     if (!available) {
@@ -146,9 +158,43 @@ export function BookingDialog({ open, onOpenChange, booking }: { open: boolean; 
               </div>
               <p className="text-xs text-muted-foreground">Duração total: <span className="font-semibold text-foreground">{fmtDuration(total)}</span>{form.start ? ` · ${form.start} às ${toTime(toMin(form.start) + total)}` : ""}</p>
             </Field>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Data" error={errors["date"]}>
-                <Input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, start: "" }))} />
+                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline"
+                      aria-label="Selecionar data no calendário"
+                      aria-haspopup="dialog"
+                      className="w-full justify-start gap-2 overflow-hidden font-normal">
+                      <CalendarDays className="h-4 w-4 shrink-0 text-primary" />
+                      <span className="min-w-0 flex-1 truncate text-left">
+                        {form.date ? format(parseISO(form.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : "Selecionar data"}
+                      </span>
+                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="z-[80] w-auto max-w-[calc(100vw-2rem)] p-2" align="start" sideOffset={6}>
+                    <Calendar
+                      mode="single"
+                      locale={ptBR}
+                      weekStartsOn={1}
+                      showOutsideDays={false}
+                      month={calendarMonth}
+                      onMonthChange={setCalendarMonth}
+                      selected={form.date ? parseISO(form.date) : undefined}
+                      disabled={(date) => format(date, "yyyy-MM-dd") < today()}
+                      onSelect={(date) => {
+                        if (!date) return;
+                        const selected = format(date, "yyyy-MM-dd");
+                        setForm((previous) => ({ ...previous, date: selected, start: "" }));
+                        setErrors((previous) => ({ ...previous, date: undefined, start: undefined }));
+                        setCalendarOpen(false);
+                      }}
+                      className="mx-auto [--cell-size:2.4rem]"
+                    />
+                    <p className="pb-1 text-center text-xs text-muted-foreground">Datas passadas estão indisponíveis</p>
+                  </PopoverContent>
+                </Popover>
               </Field>
               <Field label="Horário" error={errors["start"]}>
                 <Select value={form.start} onValueChange={set("start")}>
