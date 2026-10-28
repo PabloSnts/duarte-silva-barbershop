@@ -18,7 +18,7 @@ npm test
 npm run check:live
 ```
 
-No primeiro acesso, use a tela de entrada para definir a senha da conta autorizada e confirmar o e-mail. O agendamento público fica em /agendar; a TV usa o pareamento criado pelo barbeiro.
+O painel é aberto, sem login, por decisão explícita do responsável: qualquer pessoa com o link pode consultar clientes e alterar reservas e configurações. Não é necessário criar usuários ou definir senhas. O agendamento de clientes continua em /agendar; a TV mantém o pareamento e sua visualização reduzida. As validações de reservas, revisão de concorrência e proteção do acesso direto ao banco permanecem no servidor.
 
 Os dados antigos deste navegador são preservados e podem ser exportados pela tela de acesso. Não são importados automaticamente para evitar misturar exemplos com reservas reais.
 

@@ -20,28 +20,37 @@ function setup(overrides:Record<string,unknown>={}) {
   const request=(action:string,payload:unknown={},headers:Record<string,string>={},revision?:string)=>handle(new Request("https://example.invalid/api",{method:"POST",headers:{"Content-Type":"application/json",...headers},body:JSON.stringify({action,payload,revision})}));
   return {request,calls,handle};
 }
-describe("autorização da API",()=>{
-  it("permite atualização com identidade confirmada, autorizada e revisão correta",async()=>{
-    const {request,calls}=setup({barbershop_allowed:true,barbershop_patch:snapshot});
-    const response=await request("patch",{changes:{services:[]}}, {Authorization:"Bearer verified-session"},"revision");
+describe("painel aberto e projeções da API",()=>{
+  it("permite atualizar o painel sem sessão, mantendo a revisão correta",async()=>{
+    const {request,calls}=setup({barbershop_patch:snapshot});
+    const response=await request("patch",{changes:{services:[]}}, {},"revision");
     expect(response.status).toBe(200);
     expect((await response.json()).state.access).toBe("barber");
     expect(calls.find((c)=>c.name==="barbershop_patch")?.args).toEqual({p_changes:{services:[]},p_revision:"revision"});
   });
-  it("rejeita conta com e-mail ainda não confirmado",async()=>{
-    const {request,calls}=setup({authUser:{email:"someone@example.invalid"},barbershop_allowed:true});
-    expect((await request("patch",{}, {Authorization:"Bearer unconfirmed-session"})).status).toBe(401);
+  it("mantém a validação de alterações mesmo sem login",async()=>{
+    const {request,calls}=setup();
+    expect((await request("patch",{})).status).toBe(400);
     expect(calls.some((c)=>c.name==="barbershop_patch")).toBe(false);
   });
-  it("não oferece ações do barbeiro a visitante",async()=>{
+  it("carrega dados administrativos sem credenciais e sem expor a chave privilegiada",async()=>{
     const {request,calls}=setup();
-    for(const action of ["snapshot","patch","pair-code","disconnect-tv"]) expect((await request(action)).status).toBe(401);
-    expect(calls).toHaveLength(0);
+    const response=await request("snapshot");
+    expect(response.status).toBe(200);
+    const body=await response.json();
+    expect(body.state.access).toBe("barber");
+    expect(body.state.bookings[0].phone).toBe("5531999999999");
+    expect(JSON.stringify(body)).not.toContain(secret);
+    expect(calls.some((c)=>c.name==="barbershop_allowed")).toBe(false);
   });
-  it("ignora user_metadata e exige a lista autorizada no servidor",async()=>{
+  it("rejeita TV com token inválido sem convertê-la em sessão administrativa",async()=>{
     const {request,calls}=setup();
-    expect((await request("patch",{}, {Authorization:"Bearer fake-session"})).status).toBe(401);
-    expect(calls.find((c)=>c.name==="barbershop_allowed")?.args).toEqual({p_email:"someone@example.invalid"});
+    expect((await request("snapshot",{}, {"x-tv-session":"invalid"})).status).toBe(401);
+    expect(calls.some((c)=>c.name==="barbershop_patch")).toBe(false);
+  });
+  it("limita também as operações do painel aberto",async()=>{
+    const {request,calls}=setup({barbershop_rate_limit:false});
+    expect((await request("patch",{changes:{services:[]}}, {},"revision")).status).toBe(429);
     expect(calls.some((c)=>c.name==="barbershop_patch")).toBe(false);
   });
   it("catálogo público só contém intervalos ocupados sem PII nem preços históricos",async()=>{

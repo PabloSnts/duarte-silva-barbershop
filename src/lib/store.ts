@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { api, getAuthClient, saveTvToken, type RemoteSnapshot } from "./remote";
+import { api, saveTvToken, type RemoteSnapshot } from "./remote";
 import { normalizePhone, shopNow } from "./domain";
 export { normalizePhone, shopNow } from "./domain";
 
@@ -88,7 +88,6 @@ let state: State = empty;
 const listeners = new Set<() => void>();
 const eventListeners = new Set<(e: TvEvent) => void>();
 let started = false;
-let authUserId: string | null = null;
 let currentPath = "";
 let revision = "";
 let generation = 0;
@@ -100,13 +99,6 @@ function init() {
   if (typeof window === "undefined") return;
   if (!started) {
     started = true;
-    getAuthClient().auth.onAuthStateChange((event,session) => {
-      const userId=session?.user.id ?? null;
-      if (event === "INITIAL_SESSION" || event === "SIGNED_OUT" || event === "USER_UPDATED" || userId !== authUserId) {
-        authUserId=userId;
-        setTimeout(() => void refreshStore(true),0);
-      }
-    });
     window.setInterval(() => { if (state.access) void refreshStore(); },15000);
     window.addEventListener("focus",() => void refreshStore());
   }
@@ -138,27 +130,11 @@ export async function refreshStore(reset = false) {
   const id = ++generation;
   if (reset) { state = {...empty}; notify(); }
   try {
-    // Visitors (no barber session, no paired TV) only get the public catalogue,
-    // so the private snapshot is never requested and never answers 401.
-    const signedIn = !!(await getAuthClient().auth.getSession()).data.session;
-    const pairedTv = typeof localStorage !== "undefined" && !!localStorage.getItem("barbearia-tv-session-v1");
-    const wantsPrivate = currentPath !== "/agendar" && (signedIn || pairedTv);
-    try {
-      const snapshot = await api(wantsPrivate ? "snapshot" : "catalog");
-      if (id === generation) accept(snapshot);
-    } catch (error) {
-      // Signed in (or paired) but not authorized by the server: show the public
-      // catalogue with a clear message instead of an empty, broken page.
-      if (!wantsPrivate || (error as {status?: number}).status !== 401) throw error;
-      const snapshot = await api("catalog");
-      if (id !== generation) return;
-      accept(snapshot);
-      state = {...state,error:signedIn ? "Esta conta ainda não está autorizada como barbeiro. Peça para liberar o e-mail na lista de acesso." : "Esta TV não está mais conectada. Gere um novo código."};
-      notify();
-    }
+    const snapshot = await api(currentPath === "/agendar" ? "catalog" : "snapshot");
+    if (id === generation) accept(snapshot);
   } catch (error) {
     if (id !== generation) return;
-    // Never fall back to stale private data after logout or failed authorization.
+    // Never show stale data after a failed refresh.
     state = {...empty,loaded:true,error:error instanceof Error ? error.message : "Falha na conexão"};
     revision = "";
     notify();
@@ -168,7 +144,7 @@ export function setState(fn: (s: State) => Partial<State>, event?: TvEvent): Pro
   init();
   pendingWrites++;
   const operation = writes.then(async () => {
-    if (state.access !== "barber") throw new Error("Entre com a conta autorizada do barbeiro.");
+    if (state.access !== "barber") throw new Error("Aguarde a agenda carregar e tente novamente.");
     // A late polling response must not overwrite the result of this write.
     const id = ++generation;
     const partial = fn(state);

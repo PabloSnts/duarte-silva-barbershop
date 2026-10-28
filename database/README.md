@@ -4,18 +4,14 @@ A aplicação usa Supabase para persistência compartilhada. O cliente chama a E
 
 ## Acesso
 
-- Barbeiro: sessão Supabase Auth, e-mail confirmado e endereço habilitado em **private.barber_access**. A autorização é conferida no servidor em cada solicitação.
+- Painel administrativo aberto, sem login, por escolha explícita do responsável. Qualquer pessoa com o link pode consultar clientes e alterar reservas, serviços e configurações. Não há restrição por usuário ou senha nas operações administrativas da Edge Function.
 - Cliente: catálogo ativo e intervalos ocupados sem identificadores reais, nomes, telefones, notas ou preços históricos de outros clientes. O agendamento público somente cria reservas confirmadas; preço, duração e status vêm do servidor.
 - TV: código criptograficamente aleatório, válido por dez minutos e consumido uma única vez. A sessão do dispositivo dura até trinta dias e pode ser revogada pelo barbeiro. A TV recebe nomes conforme a configuração de privacidade, sem telefone, notas ou cadastro do cliente. Pode criar reserva e marcar ausência de atendimento do dia; não altera catálogo, expediente ou configurações.
 - Todas as tabelas mantêm RLS habilitado, sem grants de leitura/escrita para anon ou authenticated. As RPCs de negócio também não são executáveis por esses papéis.
-- A Edge Function usa verify_jwt=false porque tem rotas públicas e autentica o próprio handler. Isso **não** libera as ações privadas: o handler verifica o usuário em Auth ou o token da TV.
-- Limites globais por minuto: catálogo 240, reserva pública 30, pareamento 20 e leitura autenticada 480. Os limites são compartilhados pelos dispositivos, não por IP.
+- A Edge Function usa verify_jwt=false e aceita as operações administrativas sem sessão Auth. Tokens de TV continuam validados e recebem acesso reduzido; isso não impede que uma pessoa use diretamente o painel aberto sem token de TV.
+- Limites globais por minuto: catálogo 240, reserva pública 30, pareamento 20, operações do painel 480 e leitura da agenda 480. Os limites são compartilhados pelos dispositivos, não por IP.
 
-No primeiro acesso, o titular cria a senha pela tela de entrada e confirma o e-mail. O agente não criou uma senha nem enviou mensagem. A conta precisa constar na lista privada; a lista de produção foi inicializada separadamente com o endereço autorizado pelo usuário, sem publicá-lo em uma migration.
-
-Para outro ambiente, um administrador deve cadastrar explicitamente o e-mail autorizado:
-    insert into private.barber_access(email) values (lower(trim('<email autorizado>')));
-Não exponha essa tabela na API nem permita que o cliente a edite.
+A tela de login, o cadastro e o botão Sair foram removidos. Não é necessário criar contas ou definir senhas para usar o painel. Contas Auth e a tabela histórica `private.barber_access` não foram apagadas, mas não controlam mais o painel. Nenhuma senha ou chave privilegiada é incluída no cliente. As tabelas e RPCs continuam protegidas contra acesso direto; o acesso administrativo aberto passa pela Edge Function, com validações e revisão de concorrência.
 
 ## Estrutura
 
@@ -67,10 +63,10 @@ A ausência de importação automática é intencional: não confundir demonstra
 
 - npm ci: instalação reproduzível por package-lock.json.
 - npm run build, npm run typecheck, npm test.
-- npm run check:live: catálogo público, rejeição de ações privadas e proteção de tabela/RPC com chave publicável. Não insere reservas válidas.
+- npm run check:live: catálogo público, leitura administrativa sem sessão, rejeição de alterações inválidas e proteção de tabela/RPC com chave publicável. Não insere reservas válidas.
 - database/tests/booking-integrity.sql: regressões transacionais de reserva, soma de itens, snapshots, CAS, ajuste/undo, conclusão e TV. Os testes terminam com ROLLBACK e não deixam registros de clientes/reservas de teste.
 
-A instalação limpa em Docker não foi executada nesta máquina porque o daemon Docker está desligado. As migrations foram aplicadas ao projeto conectado e os testes de integridade foram executados nele com rollback. A confirmação de e-mail e o login com senha real requerem a ação do titular; não foram simulados com uma credencial pessoal.
+A instalação limpa em Docker não foi executada nesta máquina porque o daemon Docker está desligado. As migrations foram aplicadas ao projeto conectado e os testes de integridade foram executados nele com rollback. O painel aberto não utiliza confirmação de e-mail nem senha.
 
 Avisos INFO de RLS sem policy são esperados: o acesso passa pela Edge Function. Referência: https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy. Índices não usados devem ser avaliados com carga real, não removidos só porque o banco está vazio.
 
