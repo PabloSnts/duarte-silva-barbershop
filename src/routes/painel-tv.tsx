@@ -7,6 +7,9 @@ import { z } from "zod";
 import { displayName, endOf, serviceNames, startOf, freeSlots, onTvEvent, onVacation, pairTv, setStatus, statusLabel, today, toMin, type TvEvent, useAutoCompleteBookings, useStore } from "@/lib/store";
 import { statusStyle, useBookingDialogs } from "@/components/booking";
 
+const tvStatusLabel = { ...statusLabel, confirmada: "Agendado" };
+const tvStatusStyle = { ...statusStyle, confirmada: "bg-success/15 text-success border-success/30" };
+
 export const Route = createFileRoute("/painel-tv")({
   validateSearch: z.object({ code: z.string().max(12).optional(), local: z.number().optional() }),
   head: () => ({
@@ -262,11 +265,11 @@ function Board() {
                   </div>
                   <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-1.5 lg:col-span-1 lg:flex-nowrap lg:justify-end">
                     <span
-                      title={statusLabel[b.status]}
-                      aria-label={statusLabel[b.status]}
-                      className={`inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold lg:text-xs ${statusStyle[b.status]}`}
+                      title={tvStatusLabel[b.status]}
+                      aria-label={tvStatusLabel[b.status]}
+                      className={`inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold lg:text-xs ${tvStatusStyle[b.status]}`}
                     >
-                      {statusLabel[b.status]}
+                      {tvStatusLabel[b.status]}
                     </span>
                     {b.status !== "ausente" && b.status !== "cancelada" && (
                       <button type="button" onClick={() => setStatus(b.id, "ausente")}
@@ -336,11 +339,11 @@ function Board() {
                           <p className="truncate text-[10px] text-muted-foreground">{serviceNames(b, state.services)}</p>
                           <div className="mt-1 flex min-w-0 flex-wrap items-center justify-between gap-1">
                             <span
-                              title={statusLabel[b.status]}
-                              aria-label={statusLabel[b.status]}
+                              title={tvStatusLabel[b.status]}
+                              aria-label={tvStatusLabel[b.status]}
                               className={`inline-flex items-center text-[10px] font-semibold ${b.status === "ausente" ? "text-warning" : "text-success"}`}
                             >
-                              {statusLabel[b.status]}
+                              {tvStatusLabel[b.status]}
                             </span>
                             {b.status !== "ausente" && b.status !== "cancelada" && (
                               <button type="button" onClick={() => setStatus(b.id, "ausente")}
