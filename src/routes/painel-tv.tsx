@@ -2,10 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { addDays, addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { BellRing, ChevronLeft, ChevronRight, Maximize, Scissors, UserX } from "lucide-react";
+import { BellRing, ChevronLeft, ChevronRight, Maximize, Plus, Scissors, UserX } from "lucide-react";
 import { z } from "zod";
 import { displayName, endOf, serviceNames, startOf, freeSlots, onTvEvent, onVacation, pairTv, setStatus, statusLabel, today, toMin, type TvEvent, useAutoCompleteBookings, useStore } from "@/lib/store";
-import { statusStyle } from "@/components/booking";
+import { statusStyle, useBookingDialogs } from "@/components/booking";
 
 export const Route = createFileRoute("/painel-tv")({
   validateSearch: z.object({ code: z.string().max(12).optional(), local: z.number().optional() }),
@@ -80,6 +80,7 @@ const weekdays = [
 function Board() {
   const state = useStore((s) => s);
   useAutoCompleteBookings();
+  const bookingDialogs = useBookingDialogs();
   const [now, setNow] = useState(new Date());
   const [note, setNote] = useState<TvEvent | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -233,6 +234,12 @@ function Board() {
             className="rounded-lg p-1.5 hover:bg-card disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
         </div>
         <p className="min-w-0 truncate font-display text-base font-bold capitalize sm:text-xl" aria-live="polite">{selectedLabel}</p>
+        <button type="button" onClick={bookingDialogs.create}
+          className="ml-auto inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-gold px-3 py-2 text-xs font-semibold text-primary-foreground shadow-gold transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:text-sm"
+          aria-label="Nova reserva">
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Nova reserva
+        </button>
       </div>
 
       {!activeWeekdays.length ? (
@@ -259,7 +266,7 @@ function Board() {
                       aria-label={statusLabel[b.status]}
                       className={`inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold lg:text-xs ${statusStyle[b.status]}`}
                     >
-                      {b.status === "ausente" ? <UserX className="h-4 w-4 text-warning" aria-hidden="true" /> : statusLabel[b.status]}
+                      {statusLabel[b.status]}
                     </span>
                     {b.status !== "ausente" && b.status !== "cancelada" && (
                       <button type="button" onClick={() => setStatus(b.id, "ausente")}
@@ -333,7 +340,7 @@ function Board() {
                               aria-label={statusLabel[b.status]}
                               className={`inline-flex items-center text-[10px] font-semibold ${b.status === "ausente" ? "text-warning" : "text-success"}`}
                             >
-                              {b.status === "ausente" ? <UserX className="h-4 w-4" aria-hidden="true" /> : statusLabel[b.status]}
+                              {statusLabel[b.status]}
                             </span>
                             {b.status !== "ausente" && b.status !== "cancelada" && (
                               <button type="button" onClick={() => setStatus(b.id, "ausente")}
@@ -391,6 +398,8 @@ function Board() {
       <footer className="mt-2 shrink-0 text-xs text-muted-foreground">
         Última atualização: {state.updatedAt ? format(state.updatedAt, "HH:mm:ss") : "—"}
       </footer>
+
+      {bookingDialogs.node}
 
       {note && (
         <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4">
