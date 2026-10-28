@@ -2,9 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { addDays, addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { BellRing, ChevronLeft, ChevronRight, Maximize, Scissors } from "lucide-react";
+import { BellRing, ChevronLeft, ChevronRight, Maximize, Scissors, UserX } from "lucide-react";
 import { z } from "zod";
-import { displayName, endOf, serviceNames, startOf, freeSlots, onTvEvent, onVacation, pairTv, statusLabel, today, toMin, type TvEvent, useStore } from "@/lib/store";
+import { displayName, endOf, serviceNames, startOf, freeSlots, onTvEvent, onVacation, pairTv, setStatus, statusLabel, today, toMin, type TvEvent, useAutoCompleteBookings, useStore } from "@/lib/store";
 import { statusStyle } from "@/components/booking";
 
 export const Route = createFileRoute("/painel-tv")({
@@ -79,6 +79,7 @@ const weekdays = [
 
 function Board() {
   const state = useStore((s) => s);
+  useAutoCompleteBookings();
   const [now, setNow] = useState(new Date());
   const [note, setNote] = useState<TvEvent | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -184,7 +185,7 @@ function Board() {
   const dayCapacity = Math.max(1, Math.floor((contentHeight - 40) / 66));
   const visibleDay = list.length > dayCapacity ? list.slice(0, Math.max(0, dayCapacity - 1)) : list;
   const dayRemaining = list.length - visibleDay.length;
-  const weekCapacity = Math.max(1, Math.floor((contentHeight - 94) / 57));
+  const weekCapacity = Math.max(1, Math.floor((contentHeight - 94) / 73));
   const maxWeekBookings = Math.max(0, weekCapacity - 1);
   const gridCols = { gridTemplateColumns: `repeat(${activeWeekdays.length}, minmax(0, 1fr))` };
 
@@ -248,7 +249,19 @@ function Board() {
                     <p className="truncate text-sm font-semibold lg:text-base">{label(b)}</p>
                     <p className="truncate text-xs text-muted-foreground">{serviceNames(b, state.services)} · até {endOf(b, state.services)}</p>
                   </div>
-                  <span className={`col-span-2 w-fit max-w-full truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold lg:col-span-1 lg:text-xs ${statusStyle[b.status]}`}>{b === current ? "Em atendimento" : statusLabel[b.status]}</span>
+                  <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-1.5 lg:col-span-1 lg:flex-nowrap lg:justify-end">
+                    <span className={`max-w-full truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold lg:text-xs ${statusStyle[b.status]}`}>
+                      {statusLabel[b.status]}
+                    </span>
+                    {b.status !== "ausente" && b.status !== "cancelada" && (
+                      <button type="button" onClick={() => setStatus(b.id, "ausente")}
+                        aria-label={`Marcar ${b.client} como ausente`}
+                        title="Marcar cliente como ausente"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-warning/50 bg-warning/10 px-2 py-1 text-[10px] font-semibold text-warning transition-colors hover:bg-warning/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-warning lg:text-xs">
+                        <UserX className="h-3.5 w-3.5" /> Ausente
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
               {dayRemaining > 0 && (
@@ -306,6 +319,17 @@ function Board() {
                         <div key={b.id} className={`min-w-0 shrink-0 rounded-md border px-1.5 py-1 ${statusStyle[b.status]}`}>
                           <p className="truncate text-xs font-bold text-foreground">{startOf(b)} · {name(b.client)}</p>
                           <p className="truncate text-[10px] text-muted-foreground">{serviceNames(b, state.services)}</p>
+                          <div className="mt-1 flex min-w-0 flex-wrap items-center justify-between gap-1">
+                            <span className="truncate text-[10px] font-semibold">{statusLabel[b.status]}</span>
+                            {b.status !== "ausente" && b.status !== "cancelada" && (
+                              <button type="button" onClick={() => setStatus(b.id, "ausente")}
+                                title={`Marcar ${b.client} como ausente`}
+                                aria-label={`Marcar ${b.client} como ausente`}
+                                className="rounded border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-warning hover:bg-warning/20">
+                                Ausente
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                       {remaining > 0 && <p className="truncate rounded-md bg-muted px-1.5 py-1 text-[11px] text-muted-foreground">+ {remaining} reservas</p>}
