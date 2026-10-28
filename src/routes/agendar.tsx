@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  CalendarCheck, Check, CheckCircle2, Clock3, Info, Phone, Scissors,
+  CalendarCheck, Check, CheckCircle2, Clock3, Info, Phone,
   ShieldCheck, UserRound,
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
@@ -168,9 +168,13 @@ function CustomerBooking() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border bg-sidebar/80">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-5 sm:px-6">
-          <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-gold text-primary-foreground">
-            <Scissors className="size-6" />
-          </div>
+          <img
+            src="/duarte-silva-logo.webp"
+            alt="Logo Duarte & Silva Barbearia"
+            width={190}
+            height={81}
+            className="h-12 w-28 shrink-0 object-contain sm:h-16 sm:w-36"
+          />
           <div className="min-w-0">
             <p className="truncate font-display text-2xl font-extrabold uppercase tracking-wide sm:text-3xl">{state.settings.shopName}</p>
             <p className="text-xs text-muted-foreground">Agendamento online</p>
