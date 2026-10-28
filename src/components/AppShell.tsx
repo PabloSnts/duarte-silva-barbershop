@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Ban, CalendarClock, CalendarDays, LayoutDashboard, ListChecks, Scissors, Settings, Tv, Users } from "lucide-react";
+import { Ban, CalendarClock, CalendarDays, CalendarPlus, LayoutDashboard, ListChecks, Scissors, Settings, Tv, Users } from "lucide-react";
 import { clearDemo, useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 
@@ -14,6 +14,7 @@ const nav = [
   { to: "/blacklist", label: "Blacklist", icon: Ban },
   { to: "/tv", label: "Visualização na TV", icon: Tv },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
+  { to: "/agendar", label: "Agendamento cliente", icon: CalendarPlus },
 ] as const;
 
 const mobileNav = [nav[0], nav[1], nav[2], nav[7], nav[8]];
