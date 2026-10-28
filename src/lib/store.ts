@@ -138,7 +138,11 @@ export async function refreshStore(reset = false) {
   const id = ++generation;
   if (reset) { state = {...empty}; notify(); }
   try {
-    const snapshot = await api(currentPath === "/agendar" ? "catalog" : "snapshot");
+    // Visitors (no barber session, no paired TV) only get the public catalogue,
+    // so the private snapshot is never requested and never answers 401.
+    const signedIn = !!(await getAuthClient().auth.getSession()).data.session;
+    const pairedTv = typeof localStorage !== "undefined" && !!localStorage.getItem("barbearia-tv-session-v1");
+    const snapshot = await api(currentPath === "/agendar" || (!signedIn && !pairedTv) ? "catalog" : "snapshot");
     if (id === generation) accept(snapshot);
   } catch (error) {
     if (id !== generation) return;
