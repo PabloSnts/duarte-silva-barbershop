@@ -1,15 +1,16 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { addDays, format } from "date-fns";
+import { format } from "date-fns";
+import { toast } from "sonner";
+import { api, getAuthClient, saveTvToken, type RemoteSnapshot } from "./remote";
+import { normalizePhone, shopNow } from "./domain";
+export { normalizePhone, shopNow } from "./domain";
 
-/**
- * Client-side demo store. Persists to localStorage and syncs tabs via BroadcastChannel.
- * Shape mirrors the future REST API (bookings/services/settings/tv) so it can be swapped
- * for real API calls + realtime events (n8n -> backend -> TV) later.
- */
+/** Shared Supabase state. Old localStorage is preserved only for manual export. */
 
 export type BookingStatus = "confirmada" | "concluida" | "cancelada" | "ausente";
 export type ServiceRule = { id: string; days: number[]; start: string; end: string };
-export type Service = { id: string; name: string; duration: number; price: number; rules?: ServiceRule[] };
+export type Service = { id: string; name: string; duration: number; price: number; rules?: ServiceRule[]; active?: boolean };
+export type BookingServiceSnapshot = { id: string; name: string; duration: number; price: number };
 export type Vacation = { id: string; start: string; end: string };
 export type BlockedClient = { id: string; phone: string; name?: string | undefined; reason?: string | undefined; createdAt: number };
 export type Adjust = { id: string; date: string; fromId: string; minutes: number; ids: string[]; at: number };
@@ -19,6 +20,8 @@ export type Booking = {
   phone: string;
   serviceId: string;
   serviceIds?: string[];
+  serviceSnapshots?: BookingServiceSnapshot[];
+  clientId?: string;
   /** minutes of delay (+) or advance (-) applied by agenda adjustments */
   shift?: number | undefined;
   date: string; // yyyy-MM-dd
@@ -43,13 +46,12 @@ export type Settings = {
   vacationMessage: string;
 };
 export type TvState = { code: string | null; expires: number; connected: boolean; connectedAt?: number };
-export type State = { loaded: boolean; services: Service[]; bookings: Booking[]; settings: Settings; tv: TvState; blacklist: BlockedClient[]; adjusts: Adjust[]; updatedAt: number; demoSeedVersion?: string };
+export type State = { access?: "barber" | "tv" | "public" | undefined; error?: string | undefined; loaded: boolean; services: Service[]; bookings: Booking[]; settings: Settings; tv: TvState; blacklist: BlockedClient[]; adjusts: Adjust[]; updatedAt: number; demoSeedVersion?: string };
 export type TvEvent = { kind: "nova" | "alterada" | "cancelada"; booking: Booking; at: number };
 
 const KEY = "barbearia-snapshot-v1";
-const DEMO_SEED_VERSION = "oct-nov-2026-v1";
 const defaultSettings: Settings = {
-  shopName: "Navalha & Co.",
+  shopName: "Duarte & Silva Barbearia",
   open: "09:00",
   close: "19:00",
   workDays: [1, 2, 3, 4, 5, 6],
@@ -69,22 +71,6 @@ const defaultServices: Service[] = [
   { id: "pigmentacao", name: "Pigmentação", duration: 45, price: 0 },
 ];
 
-// Existing browser data predates the price field. Keep the original services,
-// supplement missing prices and never overwrite a price the barber has set.
-const fallbackPrices: Record<string, number> = {
-  corte: 35,
-  barba: 35,
-  combo: 70,
-  pigmentacao: 0,
-};
-function normalizeService(service: Service): Service {
-  return {
-    ...service,
-    price: typeof service.price === "number" && Number.isFinite(service.price) && service.price >= 0
-      ? service.price
-      : (fallbackPrices[service.id] ?? 0),
-  };
-}
 const empty: State = {
   loaded: false,
   services: defaultServices,
@@ -96,152 +82,102 @@ const empty: State = {
   updatedAt: 0,
 };
 
-export const uid = () => Math.random().toString(36).slice(2, 10);
-
-/**
- * One-time, editable demonstration schedule for October and November 2026.
- * Respects the user's existing working days, holidays and service restrictions,
- * deliberately leaves some working days completely free and most others partly free.
- * No Supabase writes; bookings are persisted only in the local demo store.
- */
-function seedForOctoberNovember(base: State): Booking[] {
-  const names = [
-    "Rafael Oliveira", "Lucas Ferreira", "André Martins", "Gabriel Souza",
-    "Mateus Costa", "Bruno Almeida", "Felipe Nunes", "Gustavo Ribeiro",
-    "Diego Alves", "Thiago Rocha", "Caio Pereira", "Henrique Lima",
-    "Pedro Carvalho", "Leonardo Gomes", "Vinícius Santos", "Eduardo Barros",
-    "Marcos Silva", "João Victor", "Daniel Moreira", "Igor Barbosa",
-  ];
-  const services = base.services.filter((service) => service.duration > 0);
-  if (!services.length) return [];
-
-  const result: Booking[] = [];
-  let workingIndex = 0;
-  const todayKey = today();
-  const currentTime = new Date();
-  const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
-
-  for (let day = new Date(2026, 9, 1); day <= new Date(2026, 10, 30); day = addDays(day, 1)) {
-    const date = format(day, "yyyy-MM-dd");
-    const slots = daySlots(base, date);
-    if (!slots.length) continue; // weekly days off or vacation
-    workingIndex++;
-
-    // Roughly one or two completely free working days per week.
-    if (workingIndex % 6 === 2 || workingIndex % 11 === 7) continue;
-
-    // Not all hours are reserved; allow the user to create bookings manually.
-    const desired = Math.min(Math.max(0, slots.length - 3), 3 + ((workingIndex * 5 + day.getDate()) % 6));
-    if (desired === 0) continue;
-
-    // Spread bookings throughout the morning and afternoon in a repeatable way.
-    const candidates = slots
-      .map((time, i) => ({ time, index: i, rank: (i * 17 + workingIndex * 11) % slots.length }))
-      .sort((a, b) => a.rank - b.rank || a.index - b.index);
-
-    let added = 0;
-    for (const candidate of candidates) {
-      if (added >= desired) break;
-      if ((candidate.index + workingIndex) % 7 === 0) continue;
-
-      const possibleServices = services.map((_, i) => services[(i + workingIndex + added) % services.length]!);
-      const service = possibleServices.find((item) =>
-        checkAvailability({ ...base, bookings: result }, date, candidate.time, [item.id]) === null
-      );
-      if (!service) continue;
-
-      const timeEnd = toMin(candidate.time) + service.duration;
-      const hasPassed = date < todayKey || (date === todayKey && timeEnd <= currentMinutes);
-      const status: BookingStatus = hasPassed
-        ? (workingIndex + added) % 13 === 0 ? "ausente" : "concluida"
-        : "confirmada";
-      const clientIndex = (workingIndex * 3 + added * 7) % names.length;
-
-      result.push({
-        id: `demo-2026-${date}-${candidate.time.replace(":", "")}`,
-        client: names[clientIndex]!,
-        phone: `(31) 90000-${String((workingIndex * 157 + added * 389) % 10000).padStart(4, "0")}`,
-        serviceId: service.id,
-        date,
-        start: candidate.time,
-        status,
-        demo: true,
-        createdAt: new Date(`${date}T${candidate.time}:00`).getTime(),
-      });
-      added++;
-    }
-  }
-
-  return result.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
-}
+export const uid = () => globalThis.crypto.randomUUID();
 
 let state: State = empty;
 const listeners = new Set<() => void>();
 const eventListeners = new Set<(e: TvEvent) => void>();
-let channel: BroadcastChannel | null = null;
+let started = false;
+let authUserId: string | null = null;
+let currentPath = "";
+let revision = "";
+let generation = 0;
+let pendingWrites = 0;
+let writes: Promise<unknown> = Promise.resolve();
+const notify = () => listeners.forEach((l) => l());
 
 function init() {
-  if (state.loaded || typeof window === "undefined") return;
-  try {
-    const raw = localStorage.getItem(KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    state = parsed
-      ? {
-          ...empty,
-          ...parsed,
-          services: Array.isArray(parsed.services)
-            ? parsed.services.map(normalizeService)
-            : defaultServices,
-          settings: { ...defaultSettings, ...parsed.settings },
-          loaded: true,
-        }
-      : { ...empty, loaded: true, updatedAt: Date.now() };
-  } catch {
-    state = { ...empty, loaded: true };
-  }
-  if (state.demoSeedVersion !== DEMO_SEED_VERSION) {
-    // Replace all previous demo appointments once, while preserving settings,
-    // services, blackout dates, blacklist and TV preferences.
-    state = {
-      ...state,
-      bookings: seedForOctoberNovember(state),
-      adjusts: [],
-      demoSeedVersion: DEMO_SEED_VERSION,
-      updatedAt: Date.now(),
-    };
-  }
-  persist();
-  if ("BroadcastChannel" in window) {
-    channel = new BroadcastChannel("barbearia");
-    channel.onmessage = (m) => {
-      if (m.data?.type === "state") {
-        state = { ...m.data.state, loaded: true };
-        listeners.forEach((l) => l());
-      } else if (m.data?.type === "event") {
-        eventListeners.forEach((l) => l(m.data.event));
+  if (typeof window === "undefined") return;
+  if (!started) {
+    started = true;
+    getAuthClient().auth.onAuthStateChange((event,session) => {
+      const userId=session?.user.id ?? null;
+      if (event === "INITIAL_SESSION" || event === "SIGNED_OUT" || event === "USER_UPDATED" || userId !== authUserId) {
+        authUserId=userId;
+        setTimeout(() => void refreshStore(true),0);
       }
-    };
+    });
+    window.setInterval(() => { if (state.access) void refreshStore(); },15000);
+    window.addEventListener("focus",() => void refreshStore());
+  }
+  if (currentPath !== window.location.pathname) {
+    currentPath = window.location.pathname;
+    void refreshStore(true);
   }
 }
-
-function persist() {
+function accept(snapshot: RemoteSnapshot) {
+  const previous = state;
+  const code = state.tv.code;
+  state = { ...snapshot.state, error:undefined };
+  if (code && state.tv.expires > Date.now()) state = {...state,tv:{...state.tv,code}};
+  revision = snapshot.revision;
+  notify();
+  if (previous.access === "barber" || previous.access === "tv") {
+    for (const booking of state.bookings) {
+      const old = previous.bookings.find((b)=>b.id===booking.id);
+      const changed = old && (old.date!==booking.date || old.start!==booking.start || old.shift!==booking.shift || (old.status!=="cancelada" && booking.status==="cancelada"));
+      if (!old || changed) eventListeners.forEach((l)=>l({kind:!old ? "nova" : booking.status==="cancelada" ? "cancelada" : "alterada",booking,at:Date.now()}));
+    }
+    for (const booking of previous.bookings) {
+      if (!state.bookings.some((b)=>b.id===booking.id)) eventListeners.forEach((l)=>l({kind:"cancelada",booking,at:Date.now()}));
+    }
+  }
+}
+export async function refreshStore(reset = false) {
+  if (pendingWrites && !reset) return;
+  const id = ++generation;
+  if (reset) { state = {...empty}; notify(); }
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
-  } catch {
-    /* ignore */
+    const snapshot = await api(currentPath === "/agendar" ? "catalog" : "snapshot");
+    if (id === generation) accept(snapshot);
+  } catch (error) {
+    if (id !== generation) return;
+    // Never fall back to stale private data after logout or failed authorization.
+    state = {...empty,loaded:true,error:error instanceof Error ? error.message : "Falha na conexão"};
+    revision = "";
+    notify();
   }
 }
-
-export function setState(fn: (s: State) => Partial<State>, event?: TvEvent) {
+export function setState(fn: (s: State) => Partial<State>, event?: TvEvent): Promise<boolean> {
   init();
-  state = { ...state, ...fn(state), updatedAt: Date.now() };
-  persist();
-  listeners.forEach((l) => l());
-  channel?.postMessage({ type: "state", state });
-  if (event) {
-    channel?.postMessage({ type: "event", event });
-    eventListeners.forEach((l) => l(event));
-  }
+  pendingWrites++;
+  const operation = writes.then(async () => {
+    if (state.access !== "barber") throw new Error("Entre com a conta autorizada do barbeiro.");
+    // A late polling response must not overwrite the result of this write.
+    const id = ++generation;
+    const partial = fn(state);
+    const allowed = ["services","settings","blacklist","bookings","adjusts"];
+    const changes = Object.fromEntries(Object.entries(partial).filter(([key]) => allowed.includes(key)));
+    const snapshot = await api("patch",{changes},revision);
+    if (id !== generation) return false;
+    accept(snapshot);
+    return true;
+  });
+  writes = operation.catch(() => {});
+  return operation.catch(async (error) => {
+    toast.error(error instanceof Error ? error.message : "Não foi possível salvar.");
+    await refreshStore(true);
+    return false;
+  }).finally(() => { pendingWrites--; });
+}
+/** Explicit user export; never overwrite or import the browser's old data. */
+export function exportBrowserBackup() {
+  const raw = localStorage.getItem(KEY);
+  if (!raw) { toast("Não há dados locais neste aparelho."); return; }
+  const href = URL.createObjectURL(new Blob([raw],{type:"application/json"}));
+  const anchor = document.createElement("a");
+  anchor.href = href; anchor.download = "barbearia-dados-locais-" + today() + ".json"; anchor.click();
+  URL.revokeObjectURL(href);
 }
 
 export function useStore<T>(sel: (s: State) => T): T {
@@ -274,12 +210,14 @@ export const toTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "
 
 export const bookingServiceIds = (b: Pick<Booking, "serviceId" | "serviceIds">) => (b.serviceIds?.length ? b.serviceIds : [b.serviceId]);
 export const totalDuration = (ids: string[], services: Service[]) => ids.reduce((t, id) => t + (services.find((s) => s.id === id)?.duration ?? 30), 0);
-export const serviceNames = (b: Pick<Booking, "serviceId" | "serviceIds">, services: Service[]) =>
-  bookingServiceIds(b).map((id) => services.find((s) => s.id === id)?.name ?? "Serviço").join(" + ");
+export const serviceNames = (b: Pick<Booking, "serviceId" | "serviceIds" | "serviceSnapshots">, services: Service[]) =>
+  bookingServiceIds(b).map((id) => b.serviceSnapshots?.find((s) => s.id === id)?.name ?? services.find((s) => s.id === id)?.name ?? "Serviço").join(" + ");
+export const bookingDuration = (b: Booking, services: Service[]) =>
+  b.serviceSnapshots?.length ? b.serviceSnapshots.reduce((sum, s) => sum + s.duration, 0) : totalDuration(bookingServiceIds(b), services);
 /** Effective start including delay/advance shift. */
 export const startOf = (b: Booking) => toTime(toMin(b.start) + (b.shift ?? 0));
 export function endOf(b: Booking, services: Service[]) {
-  return toTime(toMin(b.start) + (b.shift ?? 0) + totalDuration(bookingServiceIds(b), services));
+  return toTime(toMin(b.start) + (b.shift ?? 0) + bookingDuration(b, services));
 }
 export const fmtDuration = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}`);
 
@@ -288,8 +226,8 @@ export const vacationText = (s: State, v: Vacation) =>
   s.settings.vacationMessage.replace("{inicio}", v.start.split("-").reverse().join("/")).replace("{fim}", v.end.split("-").reverse().join("/"));
 export const digits = (p: string) => p.replace(/\D/g, "");
 export const isBlocked = (s: State, phone: string) => {
-  const d = digits(phone);
-  return d.length >= 8 ? s.blacklist.find((x) => digits(x.phone).endsWith(d.slice(-8)) || d.endsWith(digits(x.phone).slice(-8))) : undefined;
+  const canonical = normalizePhone(phone);
+  return canonical ? s.blacklist.find((x) => normalizePhone(x.phone) === canonical) : undefined;
 };
 
 export function daySlots(s: State, date: string) {
@@ -313,7 +251,11 @@ export function serviceRuleBlock(svc: Service | undefined, date: string, a: numb
 }
 
 export function checkAvailability(s: State, date: string, start: string, serviceIds: string[], ignoreId?: string): string | null {
-  const dur = totalDuration(serviceIds, s.services);
+  const previous = s.bookings.find((b) => b.id === ignoreId);
+  const sameServices = previous && JSON.stringify(bookingServiceIds(previous)) === JSON.stringify(serviceIds);
+  if (!serviceIds.length || new Set(serviceIds).size !== serviceIds.length || serviceIds.some((id) => !s.services.some((x) => x.id === id && (x.active !== false || sameServices)))) return "Escolha serviços disponíveis";
+  if (sameServices && previous.date===date && previous.start===start) return null;
+  const dur = sameServices ? bookingDuration(previous, s.services) : totalDuration(serviceIds, s.services);
   const a = toMin(start);
   const b = a + dur;
   if (onVacation(s, date)) return "Barbeiro de férias";
@@ -338,7 +280,8 @@ export function isAvailable(s: State, date: string, start: string, serviceId: st
 }
 
 export function freeSlots(s: State, date: string) {
-  return daySlots(s, date).filter((t) => isAvailable(s, date, t, s.services[0]?.id ?? "corte"));
+  const service = s.services.find((x) => x.active !== false);
+  return service ? daySlots(s, date).filter((t) => isAvailable(s, date, t, service.id)) : [];
 }
 
 /** Forecast closing = max(scheduled close, last effective end of active bookings). */
@@ -356,22 +299,36 @@ export function adjustTargets(s: State, fromId: string) {
     .sort((a, b) => a.start.localeCompare(b.start));
 }
 export function applyAdjust(fromId: string, minutes: number) {
-  init();
-  const ids = adjustTargets(state, fromId).map((b) => b.id);
-  const from = state.bookings.find((b) => b.id === fromId);
-  if (!from || !ids.length || !minutes) return;
-  setState((s) => ({
-    bookings: s.bookings.map((b) => (ids.includes(b.id) ? { ...b, shift: (b.shift ?? 0) + minutes } : b)),
-    adjusts: [...s.adjusts, { id: uid(), date: from.date, fromId, minutes, ids, at: Date.now() }],
-  }));
+  return setState((s) => {
+    const ids = adjustTargets(s, fromId).map((b) => b.id);
+    const from = s.bookings.find((b) => b.id === fromId);
+    if (!from || !ids.length || !Number.isInteger(minutes) || !minutes) throw new Error("Escolha um ajuste válido.");
+    const bookings = s.bookings.map((b) => ids.includes(b.id) ? {...b,shift:(b.shift ?? 0)+minutes} : b);
+    const error = adjustmentError({...s,bookings});
+    if (error) throw new Error(error);
+    return {bookings,adjusts:[...s.adjusts,{id:uid(),date:from.date,fromId,minutes,ids,at:Date.now()}]};
+  });
 }
 export function undoAdjust(id: string) {
-  const a = state.adjusts.find((x) => x.id === id);
-  if (!a) return;
-  setState((s) => ({
-    bookings: s.bookings.map((b) => (a.ids.includes(b.id) ? { ...b, shift: (b.shift ?? 0) - a.minutes } : b)),
-    adjusts: s.adjusts.filter((x) => x.id !== id),
-  }));
+  return setState((s) => {
+    const a = s.adjusts.find((x) => x.id === id);
+    if (!a) throw new Error("Este ajuste não está mais disponível.");
+    const bookings = s.bookings.map((b) => a.ids.includes(b.id) ? {...b,shift:(b.shift ?? 0)-a.minutes} : b);
+    const error = adjustmentError({...s,bookings});
+    if (error) throw new Error(error);
+    return {bookings,adjusts:s.adjusts.filter((x) => x.id !== id)};
+  });
+}
+
+export function adjustmentError(s: State): string | null {
+  const active = s.bookings.filter((b) => b.status !== "cancelada");
+  for (const b of active) {
+    const start = toMin(b.start)+(b.shift ?? 0);
+    const end = start+bookingDuration(b,s.services);
+    if (start<0 || end>1440 || Math.abs(b.shift ?? 0)>1440) return "O ajuste ultrapassa o dia da reserva.";
+    if (active.some((x) => x.id!==b.id && x.date===b.date && start<toMin(endOf(x,s.services)) && end>toMin(startOf(x)))) return "O ajuste conflita com outra reserva.";
+  }
+  return null;
 }
 
 export const statusLabel: Record<BookingStatus, string> = {
@@ -388,110 +345,81 @@ export function displayName(name: string, mode: Settings["tvClientInfo"]) {
   return parts[0];
 }
 
-export const today = () => format(new Date(), "yyyy-MM-dd");
+export const today = () => format(shopNow(), "yyyy-MM-dd");
 
 // ---------- actions ----------
-export function upsertBooking(b: Booking, isNew: boolean) {
-  setState((s) => ({ bookings: isNew ? [...s.bookings, b] : s.bookings.map((x) => (x.id === b.id ? b : x)) }), {
-    kind: isNew ? "nova" : b.status === "cancelada" ? "cancelada" : "alterada",
-    booking: b,
-    at: Date.now(),
-  });
-}
-export function setStatus(id: string, status: BookingStatus) {
+export async function upsertBooking(b: Booking, isNew: boolean): Promise<Booking | null> {
   init();
+  if (state.access !== "barber") {
+    if (!isNew) return null;
+    try {
+      const saved = await api<{booking:Booking}>("book",{booking:b});
+      await refreshStore();
+      return saved.booking;
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível reservar."); await refreshStore(); return null; }
+  }
+  const ok = await setState((s) => {
+    const old = s.bookings.find((x) => x.id === b.id);
+    const moved = old && (old.date !== b.date || old.start !== b.start);
+    return {
+      bookings:isNew ? [...s.bookings,b] : s.bookings.map((x) => x.id === b.id ? b : x),
+      ...(moved ? {adjusts:s.adjusts.map((a) => ({...a,ids:a.ids.filter((id) => id!==b.id)})).filter((a) => a.ids.length)} : {}),
+    };
+  }, {kind:isNew ? "nova" : b.status === "cancelada" ? "cancelada" : "alterada",booking:b,at:Date.now()});
+  return ok ? state.bookings.find((x) => x.id === b.id) ?? null : null;
+}
+export async function setStatus(id: string, status: BookingStatus): Promise<boolean> {
+  init();
+  if (state.access === "tv") {
+    if (status !== "ausente") return false;
+    try { accept(await api("absent",{id})); return true; }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível atualizar."); return false; }
+  }
   const b = state.bookings.find((x) => x.id === id);
-  if (!b || b.status === status) return;
-  upsertBooking({ ...b, status }, false);
+  return !!b && !!await upsertBooking({...b,status},false);
 }
 
 /**
- * Auto-finish appointments whose effective end time has passed.
- * Only "confirmada" can change automatically: manually marked
- * absences, cancellations and completed bookings are never overwritten.
- *
- * This runs while a dashboard/TV tab is open and again when returning to it.
- * In the future this rule can be moved to a server scheduler unchanged.
+ * Preserve existing hook consumers while completion runs on the server.
  */
-export function completeElapsedBookings(at: Date = new Date()): number {
-  init();
-  if (!state.loaded) return 0;
-  const date = format(at, "yyyy-MM-dd");
-  const minute = at.getHours() * 60 + at.getMinutes();
-  const completed = new Set(
-    state.bookings
-      .filter((booking) =>
-        booking.status === "confirmada" &&
-        (booking.date < date ||
-          (booking.date === date && toMin(endOf(booking, state.services)) <= minute))
-      )
-      .map((booking) => booking.id)
-  );
-  if (!completed.size) return 0;
-  setState((current) => ({
-    bookings: current.bookings.map((booking) =>
-      completed.has(booking.id) && booking.status === "confirmada"
-        ? { ...booking, status: "concluida" }
-        : booking
-    ),
-  }));
-  return completed.size;
-}
-
-/** Synchronize the temporary store on a periodic clock tick and tab refocus. */
 export function useAutoCompleteBookings() {
-  useEffect(() => {
-    const update = () => { completeElapsedBookings(); };
-    update();
-    const timer = window.setInterval(update, 15_000);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") update();
-    };
-    window.addEventListener("focus", update);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", update);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, []);
+  // Completion runs in Supabase Cron. Polling only reads the authoritative state.
+  useEffect(() => { init(); },[]);
 }
-export function clearDemo() {
-  setState((s) => ({ bookings: s.bookings.filter((b) => !b.demo) }));
-}
-
 export function deleteBooking(id: string) {
   init();
   const booking = state.bookings.find((b) => b.id === id);
   if (!booking) return;
-  setState(
+  return setState(
     (s) => ({
       bookings: s.bookings.filter((b) => b.id !== id),
-      adjusts: s.adjusts.filter((a) => !a.ids.includes(id)),
+      adjusts: s.adjusts.map((a) => ({ ...a, fromId:a.fromId===id ? "" : a.fromId, ids: a.ids.filter((x) => x !== id) })).filter((a) => a.ids.length > 0),
     }),
     { kind: "cancelada", booking, at: Date.now() },
   );
 }
 
-export function generatePairCode() {
-  const code = Array.from({ length: 6 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
-  setState(() => ({ tv: { code, expires: Date.now() + 10 * 60_000, connected: false } }));
-  return code;
+export async function generatePairCode(): Promise<string | null> {
+  try {
+    const data = await api<{code:string;expires:number}>("pair-code");
+    state = {...state,tv:{...state.tv,...data}}; notify(); return data.code;
+  } catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível gerar o código."); return null; }
 }
-export function pairTv(code: string) {
-  init();
-  const tv = state.tv;
-  if (!tv.code || tv.code !== code.toUpperCase().trim() || Date.now() > tv.expires) return false;
-  setState(() => ({ tv: { code: null, expires: 0, connected: true, connectedAt: Date.now() } }));
-  return true;
+export async function pairTv(code: string): Promise<boolean> {
+  try {
+    const data = await api<{token:string}>("pair",{code});
+    saveTvToken(data.token); await refreshStore(true); return state.access === "tv" || state.access === "barber";
+  } catch { return false; }
 }
-export function disconnectTv() {
-  setState(() => ({ tv: { code: null, expires: 0, connected: false } }));
+export async function disconnectTv(): Promise<boolean> {
+  try { accept(await api("disconnect-tv")); return true; }
+  catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível desconectar."); return false; }
 }
-
-export function addBlocked(c: Omit<BlockedClient, "id" | "createdAt">) {
-  setState((s) => ({ blacklist: [...s.blacklist, { ...c, id: uid(), createdAt: Date.now() }] }));
+export function addBlocked(c: Omit<BlockedClient,"id"|"createdAt">) {
+  const phone = normalizePhone(c.phone);
+  if (!phone) { toast.error("Informe um telefone com DDD."); return Promise.resolve(false); }
+  return setState((s) => ({blacklist:[...s.blacklist,{...c,phone,id:uid(),createdAt:Date.now()}]}));
 }
 export function removeBlocked(id: string) {
-  setState((s) => ({ blacklist: s.blacklist.filter((x) => x.id !== id) }));
+  return setState((s) => ({blacklist:s.blacklist.filter((x) => x.id !== id)}));
 }

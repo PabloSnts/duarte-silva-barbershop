@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -25,11 +26,16 @@ function Config() {
   const s = useStore((st) => st.settings);
   const tv = useStore((st) => st.tv);
   const set = (p: Partial<Settings>) => setState((st) => ({ settings: { ...st.settings, ...p } }));
+  const [name,setName] = useState(s.shopName);
+  useEffect(()=>setName(s.shopName),[s.shopName]);
   return (
     <AppShell title="Configurações">
       <div className="grid max-w-3xl gap-4">
         <Card title="Barbearia">
-          <Row label="Nome"><Input value={s.shopName} maxLength={40} onChange={(e) => set({ shopName: e.target.value })} /></Row>
+          <Row label="Nome"><Input value={name} maxLength={40} onChange={(e)=>setName(e.target.value)} onBlur={()=>{
+            if(name.trim().length<2) {toast.error("Informe o nome da barbearia.");setName(s.shopName);return;}
+            if(name.trim()!==s.shopName) void set({shopName:name.trim()});
+          }}/></Row>
         </Card>
         <Card title="Visualização na TV">
           <Row label="Mostrar horários livres"><Switch checked={s.showFreeOnTv} onCheckedChange={(v) => set({ showFreeOnTv: v })} /></Row>
@@ -45,7 +51,7 @@ function Config() {
           </Row>
           <Row label="Alertas sonoros"><Switch checked={s.sound} onCheckedChange={(v) => set({ sound: v })} /></Row>
           <Row label={tv.connected ? "TV conectada" : "Nenhuma TV conectada"}>
-            <Button variant="outline" disabled={!tv.connected} onClick={() => { disconnectTv(); toast("TV desconectada"); }}>Encerrar conexão</Button>
+            <Button variant="outline" disabled={!tv.connected} onClick={async () => { if (await disconnectTv()) toast("TV desconectada"); }}>Encerrar conexão</Button>
           </Row>
         </Card>
       </div>

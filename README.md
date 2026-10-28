@@ -1,4 +1,28 @@
-# Welcome to your Lovable project
+# Duarte & Silva — Agenda da barbearia
+
+Painel do barbeiro, agendamento público e visualização na TV, com dados compartilhados no Supabase. A integração e as regras de acesso estão documentadas em [database/README.md](database/README.md).
+
+## Executar e verificar
+
+Use Node.js 22.12+ e npm. O arquivo de dependências oficial é package-lock.json.
+
+```sh
+npm ci
+npm run dev
+```
+
+```sh
+npm run build
+npm run typecheck
+npm test
+npm run check:live
+```
+
+No primeiro acesso, use a tela de entrada para definir a senha da conta autorizada e confirmar o e-mail. O agendamento público fica em /agendar; a TV usa o pareamento criado pelo barbeiro.
+
+Os dados antigos deste navegador são preservados e podem ser exportados pela tela de acesso. Não são importados automaticamente para evitar misturar exemplos com reservas reais.
+
+## Projeto conectado ao Lovable
 
 This project was built with [Lovable](https://lovable.dev).
 
@@ -17,7 +41,7 @@ Prefer working locally? You need Node.js and npm — [install with nvm](https://
 ```sh
 git clone <this-repository-url>
 cd <repository-name>
-npm i
+npm ci
 npm run dev
 ```
 

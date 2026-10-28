@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type Service, type ServiceRule, setState, uid, useStore } from "@/lib/store";
+import { validServiceDuration } from "@/lib/domain";
 
 export const Route = createFileRoute("/servicos")({
   head: () => ({
@@ -21,12 +22,7 @@ export const Route = createFileRoute("/servicos")({
 
 const days = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-/** Valid durations are multiples of 30 minutes (30..480). */
-function validDuration(v: string): number | null {
-  if (!/^\d+$/.test(v.trim())) return null;
-  const m = Number(v);
-  return m >= 30 && m <= 480 && m % 30 === 0 ? m : null;
-}
+const validDuration = validServiceDuration;
 
 /** Accepts values in reais with at most two decimal places. */
 function parsePrice(raw: string): number | null {
@@ -50,13 +46,13 @@ function formattedPrice(price: number): string {
 const upd = (id: string, p: Partial<Service>) => setState((st) => ({ services: st.services.map((x) => (x.id === id ? { ...x, ...p } : x)) }));
 
 /** Editable money field: save only valid numeric amounts when focus leaves. */
-function PriceInput({ value, onValid, label }: { value: number; onValid: (n: number) => void; label: string }) {
+function PriceInput({ value, onValid, label }: { value: number; onValid: (n: number) => Promise<boolean>; label: string }) {
   const [text, setText] = useState(() => formattedPrice(value));
   const [error, setError] = useState(false);
 
   useEffect(() => { setText(formattedPrice(value)); }, [value]);
 
-  function commit(raw = text) {
+  async function commit(raw = text) {
     const parsed = parsePrice(raw);
     if (parsed === null) {
       setError(true);
@@ -65,7 +61,7 @@ function PriceInput({ value, onValid, label }: { value: number; onValid: (n: num
     }
     setError(false);
     setText(formattedPrice(parsed));
-    onValid(parsed);
+    if (!await onValid(parsed)) { setText(formattedPrice(value)); setError(true); }
   }
 
   return (
@@ -85,13 +81,15 @@ function PriceInput({ value, onValid, label }: { value: number; onValid: (n: num
   );
 }
 
-function DurationInput({ value, onValid }: { value: number; onValid: (m: number) => void }) {
+function DurationInput({ value, onValid }: { value: number; onValid: (m: number) => Promise<boolean> }) {
   const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)),[value]);
   const [err, setErr] = useState(false);
-  function commit(v = text) {
+  async function commit(v = text) {
     const m = validDuration(v);
-    if (m === null) { setErr(true); toast.error("Duração inválida: use múltiplos de 30 min (30, 60, 90…)"); return; }
-    setErr(false); setText(String(m)); onValid(m);
+    if (m === null) { setErr(true); toast.error("Use múltiplos de 15 min, de 15 a 480 minutos."); return; }
+    setErr(false); setText(String(m));
+    if (!await onValid(m)) { setText(String(value)); setErr(true); }
   }
   return (
     <div className="grid gap-1">
@@ -100,18 +98,28 @@ function DurationInput({ value, onValid }: { value: number; onValid: (m: number)
           onChange={(e) => { setText(e.target.value.replace(/\D/g, "")); setErr(false); }}
           onBlur={() => commit()} onKeyDown={(e) => {
             if (e.key === "Enter") commit();
-            if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); const n = Math.max(30, Math.min(480, (Math.round((Number(text) || 0) / 30) * 30) + (e.key === "ArrowUp" ? 30 : -30))); setText(String(n)); commit(String(n)); }
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); const n = Math.max(15, Math.min(480, (Math.round((Number(text) || 0) / 15) * 15) + (e.key === "ArrowUp" ? 15 : -15))); setText(String(n)); commit(String(n)); }
           }} aria-label="Duração em minutos" />
         <span className="text-xs text-muted-foreground">min</span>
       </div>
-      {err && <p className="text-xs text-destructive">Só múltiplos de 30</p>}
+      {err && <p className="text-xs text-destructive">Múltiplos de 15 (15–480 min)</p>}
     </div>
   );
 }
 
+function ServiceName({service}:{service:Service}) {
+  const [name,setName] = useState(service.name);
+  useEffect(()=>setName(service.name),[service.name]);
+  return <Input value={name} maxLength={50} onChange={(e)=>setName(e.target.value)} aria-label="Nome do serviço" onBlur={()=>{
+    if (name.trim().length<2) { toast.error("Informe o nome do serviço."); setName(service.name); return; }
+    if (name.trim()!==service.name) void upd(service.id,{name:name.trim()});
+  }} />;
+}
+
 function Rules({ s }: { s: Service }) {
-  const rules = s.rules ?? [];
-  const setRules = (r: ServiceRule[]) => upd(s.id, { rules: r });
+  const [rules,setRules] = useState<ServiceRule[]>(s.rules ?? []);
+  const saved = JSON.stringify(s.rules ?? []);
+  useEffect(() => setRules(JSON.parse(saved) as ServiceRule[]),[saved]);
   return (
     <div className="grid gap-2 border-t border-border pt-3">
       <p className="text-xs text-muted-foreground">{rules.length ? "Só pode ser agendado nestes dias e horários:" : "Disponível em todo o expediente."}</p>
@@ -129,6 +137,10 @@ function Rules({ s }: { s: Service }) {
         </div>
       ))}
       <Button variant="outline" size="sm" className="w-fit" onClick={() => setRules([...rules, { id: uid(), days: [1], start: "08:00", end: "11:00" }])}><Plus className="h-3 w-3" />Adicionar dia/horário</Button>
+      {JSON.stringify(rules)!==saved && <Button size="sm" className="w-fit" onClick={async()=>{
+        if (rules.some((r)=>!r.days.length || !r.start || !r.end || r.start>=r.end)) { toast.error("Selecione os dias e um intervalo válido."); return; }
+        if (await upd(s.id,{rules})) toast.success("Dias e horários salvos");
+      }}>Salvar dias e horários</Button>}
     </div>
   );
 }
@@ -138,14 +150,14 @@ function Servicos() {
   const [name, setName] = useState("");
   const [dur, setDur] = useState("30");
   const [price, setPrice] = useState("");
-  function add() {
+  async function add() {
     const n = name.trim().slice(0, 50);
     const m = validDuration(dur);
     const amount = parsePrice(price);
     if (n.length < 2) { toast.error("Informe o nome do serviço"); return; }
-    if (m === null) { toast.error("Duração inválida: use múltiplos de 30 min (30, 60, 90…)"); return; }
+    if (m === null) { toast.error("Use múltiplos de 15 min, de 15 a 480 minutos."); return; }
     if (amount === null) { toast.error("Informe o preço do serviço em reais (ex.: 35,00)"); return; }
-    setState((s) => ({ services: [...s.services, { id: uid(), name: n, duration: m, price: amount }] }));
+    if (!await setState((s) => ({ services: [...s.services, { id: uid(), name: n, duration: m, price: amount }] }))) return;
     setName("");
     setDur("30");
     setPrice("");
@@ -173,12 +185,12 @@ function Servicos() {
           </label>
           <Button onClick={add} aria-label="Adicionar serviço"><Plus className="h-4 w-4" /><span className="sm:hidden">Adicionar serviço</span></Button>
         </div>
-        {services.map((service) => (
+        {services.filter((s) => s.active !== false).map((service) => (
           <div key={service.id} className="grid gap-3 rounded-xl border border-border bg-card p-3">
             <div className="flex flex-wrap items-end gap-2">
               <label className="grid min-w-[160px] flex-1 gap-1">
                 <span className="text-xs text-muted-foreground">Serviço</span>
-                <Input value={service.name} maxLength={50} onChange={(e) => upd(service.id, { name: e.target.value })} aria-label="Nome do serviço" />
+                <ServiceName service={service} />
               </label>
               <div className="w-[105px] sm:w-[120px]">
                 <span className="text-xs text-muted-foreground">Duração</span>
@@ -187,7 +199,7 @@ function Servicos() {
               <div className="w-[125px] sm:w-[145px]">
                 <PriceInput value={service.price ?? 0} onValid={(amount) => upd(service.id, { price: amount })} label="Preço" />
               </div>
-              <Button size="icon" variant="ghost" aria-label={`Remover ${service.name}`} onClick={() => setState((st) => ({ services: st.services.filter((x) => x.id !== service.id) }))}><Trash2 className="h-4 w-4" /></Button>
+              <Button size="icon" variant="ghost" aria-label={`Remover ${service.name}`} onClick={() => setState((st) => ({ services: st.services.map((x) => x.id === service.id ? { ...x, active: false } : x) }))}><Trash2 className="h-4 w-4" /></Button>
             </div>
             <Rules s={service} />
           </div>

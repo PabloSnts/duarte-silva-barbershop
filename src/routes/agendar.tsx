@@ -1,7 +1,9 @@
+import { shopNow } from "@/lib/domain";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { normalizePhone } from "@/lib/domain";
 import {
   CalendarCheck, Check, CheckCircle2, Clock3, Info, Phone,
   ShieldCheck, UserRound,
@@ -12,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import {
   type Booking, type State, bookingServiceIds, checkAvailability, daySlots,
   fmtDuration, isAvailable, isBlocked, serviceNames, today, toMin, totalDuration,
-  uid, upsertBooking, useStore,
+  uid, upsertBooking, useStore, refreshStore,
 } from "@/lib/store";
 
 export const Route = createFileRoute("/agendar")({
@@ -32,9 +34,7 @@ const money = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
 function validPhone(value: string) {
-  const digits = value.replace(/\D/g, "");
-  return digits.length === 10 || digits.length === 11 ||
-    ((digits.length === 12 || digits.length === 13) && digits.startsWith("55"));
+  return !!normalizePhone(value);
 }
 
 /** Uses the same business rules as the barber's agenda, including breaks and vacations. */
@@ -67,11 +67,12 @@ function CustomerBooking() {
   const [chosenDate, setChosenDate] = useState("");
   const [chosenTime, setChosenTime] = useState("");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [confirmed, setConfirmed] = useState<Booking | null>(null);
-  const [clock, setClock] = useState(() => new Date());
+  const [clock, setClock] = useState(() => shopNow());
 
   useEffect(() => {
-    const interval = setInterval(() => setClock(new Date()), 60_000);
+    const interval = setInterval(() => setClock(shopNow()), 60_000);
     return () => clearInterval(interval);
   }, []);
 
@@ -80,7 +81,7 @@ function CustomerBooking() {
   const totalPrice = selectedServices.reduce((sum, service) => sum + (service.price ?? 0), 0);
   const freeTimes = chosenDate ? openTimes(state, chosenDate, chosenServices, clock) : [];
   const selectedDate = chosenDate ? parseISO(chosenDate) : undefined;
-  const ready = state.loaded && customerName.trim().length >= 2 &&
+  const ready = state.loaded && !!state.access && customerName.trim().length >= 2 &&
     validPhone(phone) && chosenServices.length > 0 && !!chosenDate &&
     !!chosenTime && freeTimes.includes(chosenTime);
 
@@ -104,9 +105,10 @@ function CustomerBooking() {
     setError("");
   }
 
-  function confirm() {
+  async function confirm() {
+    if (saving) return;
     setError("");
-    if (!state.loaded) {
+    if (!state.loaded || !state.access) {
       setError("A agenda ainda está carregando. Tente novamente.");
       return;
     }
@@ -131,7 +133,7 @@ function CustomerBooking() {
       return;
     }
     // Always check again on confirmation, including past slots.
-    if (!openTimes(state, chosenDate, chosenServices, new Date()).includes(chosenTime) ||
+    if (!openTimes(state, chosenDate, chosenServices, shopNow()).includes(chosenTime) ||
         checkAvailability(state, chosenDate, chosenTime, chosenServices) !== null) {
       setChosenTime("");
       setError("Esse horário não está mais disponível. Escolha outro horário.");
@@ -147,12 +149,14 @@ function CustomerBooking() {
       date: chosenDate,
       start: chosenTime,
       status: "confirmada",
-      demo: true,
+      demo: false,
       createdAt: Date.now(),
     };
-    // Demonstration only. This browser's localStorage is NOT a shared booking backend.
-    upsertBooking(booking, true);
-    setConfirmed(booking);
+    setSaving(true);
+    const saved = await upsertBooking(booking, true);
+    setSaving(false);
+    if (!saved) { setError("Não foi possível confirmar. Confira o horário e tente novamente."); return; }
+    setConfirmed(saved);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -188,7 +192,7 @@ function CustomerBooking() {
             <div className="mx-auto grid size-20 place-items-center rounded-full bg-success/15 text-success">
               <CheckCircle2 className="size-12" />
             </div>
-            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.2em] text-success">Agendamento de demonstração</p>
+            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.2em] text-success">Agendamento confirmado</p>
             <h1 className="mt-2 text-4xl font-extrabold uppercase sm:text-5xl">Horário registrado!</h1>
             <p className="mt-3 text-sm text-muted-foreground sm:text-base">
               Seu agendamento foi salvo nesta versão de testes.
@@ -199,11 +203,11 @@ function CustomerBooking() {
               <div className="flex justify-between gap-3"><span className="text-muted-foreground">Serviços</span><strong className="max-w-[65%] text-right">{serviceNames(confirmed, state.services)}</strong></div>
               <div className="flex justify-between gap-3"><span className="text-muted-foreground">Data</span><strong className="text-right capitalize">{format(parseISO(confirmed.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</strong></div>
               <div className="flex justify-between gap-3"><span className="text-muted-foreground">Horário</span><strong>{confirmed.start}</strong></div>
-              <div className="flex justify-between gap-3 border-t border-border pt-3"><span className="text-muted-foreground">Total</span><strong className="text-xl text-primary">{money(bookingServiceIds(confirmed).reduce((acc, id) => acc + (state.services.find((s) => s.id === id)?.price ?? 0), 0))}</strong></div>
+              <div className="flex justify-between gap-3 border-t border-border pt-3"><span className="text-muted-foreground">Total</span><strong className="text-xl text-primary">{money(confirmed.serviceSnapshots?.reduce((sum,s)=>sum+s.price,0) ?? bookingServiceIds(confirmed).reduce((acc, id) => acc + (state.services.find((s) => s.id === id)?.price ?? 0), 0))}</strong></div>
             </div>
             <div className="mt-5 rounded-lg border border-warning/30 bg-warning/10 p-4 text-left text-sm text-muted-foreground">
               <Info className="mr-2 inline size-4 text-warning" />
-              Modo de demonstração: a reserva existe apenas neste navegador. Nenhuma mensagem foi enviada pelo WhatsApp. A integração real será feita posteriormente.
+              Sua reserva foi registrada. Para alterações, entre em contato com a barbearia.
             </div>
             <Button onClick={newBooking} className="mt-6 w-full bg-gold text-primary-foreground sm:w-auto">
               Agendar outro horário
@@ -222,10 +226,7 @@ function CustomerBooking() {
                 Informe seus dados, escolha os serviços e selecione um horário disponível.
                 Simples, rápido e sem precisar criar uma conta.
               </p>
-              <p className="mt-3 flex items-start gap-2 text-xs text-warning">
-                <Info className="mt-0.5 size-4 shrink-0" />
-                Versão de testes: as reservas são salvas somente neste navegador, sem confirmação por WhatsApp.
-              </p>
+              {state.error && <p role="alert" className="mt-3 text-sm text-warning">Não foi possível carregar a agenda. <button className="underline" onClick={()=>void refreshStore(true)}>Tentar novamente</button></p>}
             </div>
 
             <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,0.85fr)]">
@@ -254,7 +255,7 @@ function CustomerBooking() {
                     <p className="rounded-xl bg-muted p-4 text-sm text-muted-foreground">Nenhum serviço cadastrado no momento.</p>
                   ) : (
                     <div className="grid gap-2">
-                      {state.services.map((service) => {
+                      {state.services.filter((s) => s.active !== false).map((service) => {
                         const active = chosenServices.includes(service.id);
                         return (
                           <button key={service.id} type="button" aria-pressed={active}
@@ -392,9 +393,9 @@ function CustomerBooking() {
                     </p>
                   )}
                   <Button className="mt-6 h-12 w-full bg-gold text-primary-foreground"
-                    onClick={confirm} disabled={!state.loaded}>
+                    onClick={confirm} disabled={!state.loaded || !state.access || saving}>
                     <CheckCircle2 className="size-5" />
-                    {ready ? "Confirmar agendamento" : "Conferir e confirmar"}
+                    {saving ? "Confirmando…" : ready ? "Confirmar agendamento" : "Conferir e confirmar"}
                   </Button>
                   <p className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
                     <ShieldCheck className="mt-0.5 size-4 shrink-0" />
@@ -407,7 +408,7 @@ function CustomerBooking() {
         )}
       </main>
       <footer className="border-t border-border px-4 py-6 text-center text-xs text-muted-foreground">
-        {state.settings.shopName} · Agendamento online · Versão de demonstração
+        {state.settings.shopName} · Agendamento online
       </footer>
     </div>
   );

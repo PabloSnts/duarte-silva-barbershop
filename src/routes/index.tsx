@@ -1,3 +1,4 @@
+import { shopNow } from "@/lib/domain";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CalendarCheck, CheckCircle2, Clock, Plus, Tv, UserRound, XCircle } from "lucide-react";
 import { AppShell, EmptyState } from "@/components/AppShell";
@@ -22,7 +23,7 @@ function Dashboard() {
   const d = useBookingDialogs();
   const t = today();
   const todays = state.bookings.filter((b) => b.date === t).sort((a, b) => a.start.localeCompare(b.start));
-  const now = new Date().getHours() * 60 + new Date().getMinutes();
+  const now = shopNow().getHours() * 60 + shopNow().getMinutes();
   const upcoming = todays.filter((b) => b.status === "confirmada" && toMin(startOf(b)) >= now - 15);
   const next = upcoming[0];
   const stats = [

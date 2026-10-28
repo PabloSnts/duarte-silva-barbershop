@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { validHours } from "@/lib/domain";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
@@ -29,9 +30,11 @@ function Expediente() {
   const set = (p: Partial<Settings>) => setState((st) => ({ settings: { ...st.settings, ...p } }));
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  function addVac() {
+  const [message,setMessage] = useState(s.vacationMessage);
+  useEffect(()=>setMessage(s.vacationMessage),[s.vacationMessage]);
+  async function addVac() {
     if (!from || !to || to < from) { toast.error("Informe início e fim válidos"); return; }
-    set({ vacations: [...s.vacations, { id: uid(), start: from, end: to }].sort((a, b) => a.start.localeCompare(b.start)) });
+    if (!await set({ vacations: [...s.vacations, { id: uid(), start: from, end: to }].sort((a, b) => a.start.localeCompare(b.start)) })) return;
     setFrom(""); setTo("");
     toast.success("Férias cadastradas — a agenda fica bloqueada nesse período");
   }
@@ -40,14 +43,7 @@ function Expediente() {
       <div className="grid max-w-3xl gap-4">
         <section className="grid gap-4 rounded-xl border border-border bg-card p-5">
           <h2 className="text-xl font-bold uppercase">Horários</h2>
-          <div className="grid items-center gap-2 sm:grid-cols-[220px_minmax(0,1fr)]">
-            <p className="text-sm text-muted-foreground">Abertura / fechamento</p>
-            <div className="flex gap-2"><Input type="time" value={s.open} onChange={(e) => set({ open: e.target.value })} /><Input type="time" value={s.close} onChange={(e) => set({ close: e.target.value })} /></div>
-          </div>
-          <div className="grid items-center gap-2 sm:grid-cols-[220px_minmax(0,1fr)]">
-            <p className="text-sm text-muted-foreground">Intervalo (bloqueio)</p>
-            <div className="flex gap-2"><Input type="time" value={s.breakStart} onChange={(e) => set({ breakStart: e.target.value })} /><Input type="time" value={s.breakEnd} onChange={(e) => set({ breakEnd: e.target.value })} /></div>
-          </div>
+          <HoursEditor settings={s} onSave={set} />
           <div className="grid items-center gap-2 sm:grid-cols-[220px_minmax(0,1fr)]">
             <p className="text-sm text-muted-foreground">Duração padrão do horário</p>
             <Select value={String(s.slot)} onValueChange={(v) => set({ slot: Number(v) })}>
@@ -86,11 +82,31 @@ function Expediente() {
           ))}
           <div className="grid gap-1.5">
             <p className="text-sm text-muted-foreground">Mensagem padrão para clientes durante as férias (use {"{inicio}"} e {"{fim}"})</p>
-            <Textarea value={s.vacationMessage} maxLength={400} onChange={(e) => set({ vacationMessage: e.target.value })} />
+            <Textarea value={message} maxLength={400} onChange={(e) => setMessage(e.target.value)} onBlur={()=>{if(message!==s.vacationMessage) void set({vacationMessage:message});}} />
             {s.vacations[0] && <p className="rounded-lg bg-muted p-3 text-sm">Prévia: {vacationText(state, s.vacations[0])}</p>}
           </div>
         </section>
       </div>
     </AppShell>
   );
+}
+
+function HoursEditor({settings:s,onSave}:{settings:Settings;onSave:(p:Partial<Settings>)=>Promise<boolean>}) {
+  const [hours,setHours] = useState({open:s.open,close:s.close,breakStart:s.breakStart,breakEnd:s.breakEnd});
+  const [saving,setSaving] = useState(false);
+  useEffect(()=>setHours({open:s.open,close:s.close,breakStart:s.breakStart,breakEnd:s.breakEnd}),[s.open,s.close,s.breakStart,s.breakEnd]);
+  return <div className="grid gap-3">
+    <div className="grid items-center gap-2 sm:grid-cols-[220px_minmax(0,1fr)]">
+      <p className="text-sm text-muted-foreground">Abertura / fechamento</p>
+      <div className="flex gap-2"><Input aria-label="Abertura" type="time" value={hours.open} onChange={(e)=>setHours({...hours,open:e.target.value})}/><Input aria-label="Fechamento" type="time" value={hours.close} onChange={(e)=>setHours({...hours,close:e.target.value})}/></div>
+    </div>
+    <div className="grid items-center gap-2 sm:grid-cols-[220px_minmax(0,1fr)]">
+      <p className="text-sm text-muted-foreground">Intervalo (bloqueio)</p>
+      <div className="flex gap-2"><Input aria-label="Início do intervalo" type="time" value={hours.breakStart} onChange={(e)=>setHours({...hours,breakStart:e.target.value})}/><Input aria-label="Fim do intervalo" type="time" value={hours.breakEnd} onChange={(e)=>setHours({...hours,breakEnd:e.target.value})}/></div>
+    </div>
+    <Button className="w-fit" disabled={saving} onClick={async()=>{
+      if (!validHours(hours.open,hours.close,hours.breakStart,hours.breakEnd)) {toast.error("Confira abertura, fechamento e intervalo.");return;}
+      setSaving(true); if(await onSave(hours)) toast.success("Horários salvos"); setSaving(false);
+    }}>Salvar horários</Button>
+  </div>;
 }

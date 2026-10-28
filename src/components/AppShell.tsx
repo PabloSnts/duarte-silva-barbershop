@@ -1,7 +1,9 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { Ban, CalendarClock, CalendarDays, CalendarPlus, LayoutDashboard, ListChecks, Menu, Scissors, Settings, Tv, Users } from "lucide-react";
-import { clearDemo, useAutoCompleteBookings, useStore } from "@/lib/store";
+import { exportBrowserBackup, useAutoCompleteBookings, useStore } from "@/lib/store";
+import { getAuthClient } from "@/lib/remote";
+import { LoginPanel } from "./LoginPanel";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
@@ -23,11 +25,16 @@ const mobileNav = [nav[0], nav[1], nav[2], nav[7]];
 export function AppShell({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const shop = useStore((s) => s.settings.shopName);
-  const hasDemo = useStore((s) => s.bookings.some((b) => b.demo));
+  const access = useStore((s) => s.access);
+  const loaded = useStore((s) => s.loaded);
+  const connectionError = useStore((s) => s.error);
   const tvOn = useStore((s) => s.tv.connected);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const menuActive = !mobileNav.some((item) => item.to === "/" ? path === "/" : path.startsWith(item.to));
   useAutoCompleteBookings();
+
+  if (!loaded) return <main className="grid min-h-dvh place-items-center bg-background" role="status">Carregando agenda…</main>;
+  if (access !== "barber") return <LoginPanel error={connectionError} />;
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[250px_1fr]">
@@ -67,12 +74,10 @@ export function AppShell({ title, actions, children }: { title: string; actions?
       </aside>
 
       <div className="flex min-w-0 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0">
-        {hasDemo && (
-          <div className="flex flex-wrap items-center justify-center gap-3 border-b border-border bg-primary/10 px-4 py-2 text-center text-xs text-primary">
-            Exibindo dados de demonstração — não são reservas reais.
-            <button onClick={clearDemo} className="underline underline-offset-2">Remover exemplos</button>
-          </div>
-        )}
+        <div className="flex flex-wrap justify-end gap-4 px-4 pt-2 text-xs text-muted-foreground">
+          <button onClick={exportBrowserBackup} className="underline">Exportar dados antigos deste aparelho</button>
+          <button onClick={()=>void getAuthClient().auth.signOut()} className="underline">Sair</button>
+        </div>
         <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-5 md:px-8 md:py-7">
           <h1 className="truncate text-3xl font-bold uppercase md:text-4xl">{title}</h1>
           <div className="flex shrink-0 items-center gap-2">{actions}</div>

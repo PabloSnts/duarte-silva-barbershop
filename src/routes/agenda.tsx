@@ -1,3 +1,4 @@
+import { shopNow } from "@/lib/domain";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { addDays, addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
@@ -28,7 +29,7 @@ function Agenda() {
   const state = useStore((s) => s);
   const d = useBookingDialogs();
   const [mode, setMode] = useState<Mode>("dia");
-  const [cur, setCur] = useState(() => new Date());
+  const [cur, setCur] = useState(() => shopNow());
   const [filter, setFilter] = useState<"todas" | BookingStatus>("todas");
   const key = (x: Date) => format(x, "yyyy-MM-dd");
   const of = (date: string) =>
@@ -54,7 +55,7 @@ function Agenda() {
         </div>
         <div className="flex items-center gap-1">
           <Button size="icon" variant="ghost" onClick={() => move(-1)} aria-label="Anterior"><ChevronLeft className="h-4 w-4" /></Button>
-          <Button variant="outline" size="sm" onClick={() => setCur(new Date())}>Hoje</Button>
+          <Button variant="outline" size="sm" onClick={() => setCur(shopNow())}>Hoje</Button>
           <Button size="icon" variant="ghost" onClick={() => move(1)} aria-label="Próximo"><ChevronRight className="h-4 w-4" /></Button>
         </div>
         <p className="font-display text-xl font-bold capitalize">{label}</p>
@@ -76,7 +77,7 @@ function Agenda() {
           {daySlots(state, key(cur)).map((t) => {
             const bs = of(key(cur)).filter((b) => b.start === t);
             const covered = state.bookings.some((b) => b.date === key(cur) && b.status !== "cancelada" && toMin(startOf(b)) < toMin(t) && toMin(endOf(b, state.services)) > toMin(t) && b.start !== t);
-            const free = !bs.length && !covered && isAvailable(state, key(cur), t, state.services[0]?.id ?? "corte");
+            const free = !bs.length && !covered && isAvailable(state, key(cur), t, state.services.find((s) => s.active !== false)?.id ?? "corte");
             return (
               <div key={t} className="grid grid-cols-[56px_minmax(0,1fr)] gap-3">
                 <p className="pt-3 text-sm font-semibold text-muted-foreground">{t}</p>
@@ -106,12 +107,12 @@ function Agenda() {
         <div className="grid gap-3 md:grid-cols-7">
           {eachDayOfInterval({ start: startOfWeek(cur, { weekStartsOn: 1 }), end: endOfWeek(cur, { weekStartsOn: 1 }) }).map((day) => {
             const bs = of(key(day));
-            const free = state.loaded ? daySlots(state, key(day)).filter((t) => isAvailable(state, key(day), t, state.services[0]?.id ?? "")).length : 0;
+            const free = state.loaded ? daySlots(state, key(day)).filter((t) => isAvailable(state, key(day), t, state.services.find((s) => s.active !== false)?.id ?? "")).length : 0;
             return (
               <div key={key(day)} className="rounded-xl border border-border bg-card p-3">
                 <button onClick={() => { setCur(day); setMode("dia"); }} className="mb-2 w-full text-left">
                   <p className="text-xs uppercase text-muted-foreground">{format(day, "EEE", { locale: ptBR })}</p>
-                  <p className={`font-display text-2xl font-bold ${key(day) === key(new Date()) ? "text-primary" : ""}`}>{format(day, "d")}</p>
+                  <p className={`font-display text-2xl font-bold ${key(day) === key(shopNow()) ? "text-primary" : ""}`}>{format(day, "d")}</p>
                   <p className="text-xs text-success">{free} livres</p>
                 </button>
                 <div className="grid gap-1.5">
@@ -137,7 +138,7 @@ function Agenda() {
               <button
                 key={key(day)}
                 onClick={() => { setCur(day); setMode("dia"); }}
-                className={`aspect-square rounded-lg border border-border p-1.5 text-left sm:p-2 ${isSameMonth(day, cur) ? "bg-card" : "opacity-40"} ${key(day) === key(new Date()) ? "ring-1 ring-primary" : ""}`}
+                className={`aspect-square rounded-lg border border-border p-1.5 text-left sm:p-2 ${isSameMonth(day, cur) ? "bg-card" : "opacity-40"} ${key(day) === key(shopNow()) ? "ring-1 ring-primary" : ""}`}
               >
                 <p className="text-sm font-semibold">{format(day, "d")}</p>
                 {n > 0 && (

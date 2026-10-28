@@ -55,13 +55,13 @@ export function AdjustPanel({ date }: { date: string }) {
             return <p key={b.id}>{b.client}: <span className="text-muted-foreground line-through">{toTime(a)}–{toTime(a + dur(b))}</span> → <span className="font-semibold">{toTime(a + delta)}–{toTime(a + delta + dur(b))}</span></p>;
           })}
           <p className="text-muted-foreground">Novo encerramento previsto: <span className="font-semibold text-foreground">{newClose}</span></p>
-          <Button size="sm" className="mt-2 w-fit" onClick={() => { applyAdjust(from, delta); setMins(""); toast.success(`Agenda ${kind === "atraso" ? "atrasada" : "adiantada"} em ${n} min`); }}>Confirmar ajuste</Button>
+          <Button size="sm" className="mt-2 w-fit" onClick={async () => { if (await applyAdjust(from, delta)) { setMins(""); toast.success(`Agenda ${kind === "atraso" ? "atrasada" : "adiantada"} em ${n} min`); } }}>Confirmar ajuste</Button>
         </div>
       )}
       {adjusts.map((a) => (
         <div key={a.id} className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Ajuste aplicado: {a.minutes > 0 ? `+${a.minutes}` : a.minutes} min em {a.ids.length} atendimento(s)</span>
-          <Button size="sm" variant="ghost" onClick={() => { undoAdjust(a.id); toast("Ajuste desfeito"); }}><Undo2 className="h-3 w-3" />Desfazer</Button>
+          <Button size="sm" variant="ghost" onClick={async () => { if (await undoAdjust(a.id)) toast("Ajuste desfeito"); }}><Undo2 className="h-3 w-3" />Desfazer</Button>
         </div>
       ))}
     </section>

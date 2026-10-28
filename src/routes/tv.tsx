@@ -70,7 +70,7 @@ function TvSetup() {
             <Button className="mt-5" variant="outline" onClick={generatePairCode}>Gerar código de pareamento</Button>
           )}
           <p className="mt-5 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-            Modo demonstração: o pareamento funciona entre abas do mesmo navegador. Para conectar uma TV física, é preciso ativar o servidor com atualização em tempo real.
+            O código conecta uma TV física à agenda. A tela recebe as atualizações automaticamente e pode ser desconectada pelo barbeiro.
           </p>
         </section>
       </div>

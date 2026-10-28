@@ -1,3 +1,4 @@
+import { shopNow } from "@/lib/domain";
 import { useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -24,10 +25,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MoreHorizontal } from "lucide-react";
+import { normalizePhone } from "@/lib/domain";
 import {
   type Booking,
   type BookingStatus,
   bookingServiceIds,
+  bookingDuration,
   checkAvailability,
   daySlots,
   deleteBooking,
@@ -50,7 +53,7 @@ import {
 
 const schema = z.object({
   client: z.string().trim().min(2, "Informe o nome").max(80),
-  phone: z.string().trim().regex(/^[\d\s()+-]{8,20}$/, "Telefone inválido"),
+  phone: z.string().trim().refine((phone) => !!normalizePhone(phone), "Informe um telefone com DDD"),
   serviceIds: z.array(z.string()).min(1, "Escolha ao menos um serviço"),
   date: z.string().min(10, "Escolha a data"),
   start: z.string().min(4, "Escolha o horário"),
@@ -73,15 +76,17 @@ export function BookingDialog({ open, onOpenChange, booking }: { open: boolean; 
   const [form, setForm] = useState<{ client: string; phone: string; serviceIds: string[]; date: string; start: string; notes: string }>({ client: "", phone: "", serviceIds: [], date: today(), start: "", notes: "" });
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [confirm, setConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+  const [calendarMonth, setCalendarMonth] = useState(() => shopNow());
 
   useEffect(() => {
     if (open) {
-      setForm(booking ? { client: booking.client, phone: booking.phone, serviceIds: bookingServiceIds(booking), date: booking.date, start: booking.start, notes: booking.notes ?? "" } : { client: "", phone: "", serviceIds: state.services[0] ? [state.services[0].id] : [], date: today(), start: "", notes: "" });
+      const firstService=state.services.find((s)=>s.active!==false);
+      setForm(booking ? { client: booking.client, phone: booking.phone, serviceIds: bookingServiceIds(booking), date: booking.date, start: booking.start, notes: booking.notes ?? "" } : { client: "", phone: "", serviceIds: firstService ? [firstService.id] : [], date: today(), start: "", notes: "" });
       setErrors({});
       setCalendarOpen(false);
-      setCalendarMonth(booking ? parseISO(booking.date) : new Date());
+      setCalendarMonth(booking ? parseISO(booking.date) : shopNow());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, booking]);
@@ -89,7 +94,7 @@ export function BookingDialog({ open, onOpenChange, booking }: { open: boolean; 
   const slots = useMemo(() => daySlots(state, form.date), [state, form.date]);
   const problem = form.start && form.serviceIds.length ? checkAvailability(state, form.date, form.start, form.serviceIds, booking?.id) : undefined;
   const available = problem === undefined ? null : problem === null;
-  const total = totalDuration(form.serviceIds, state.services);
+  const total = booking && JSON.stringify(form.serviceIds) === JSON.stringify(bookingServiceIds(booking)) ? bookingDuration(booking,state.services) : totalDuration(form.serviceIds, state.services);
   const blocked = isBlocked(state, form.phone);
 
   function save() {
@@ -116,10 +121,14 @@ export function BookingDialog({ open, onOpenChange, booking }: { open: boolean; 
     }
     commit();
   }
-  function commit() {
+  async function commit() {
+    if (saving) return;
+    setSaving(true);
     const base = { ...form, serviceId: form.serviceIds[0]!, notes: form.notes };
     const b: Booking = booking ? { ...booking, ...base, shift: booking.date === form.date && booking.start === form.start ? booking.shift : 0 } : { ...base, id: uid(), status: "confirmada", createdAt: Date.now() };
-    upsertBooking(b, !booking);
+    const saved = await upsertBooking(b, !booking);
+    setSaving(false);
+    if (!saved) return;
     toast.success(booking ? "Reserva alterada" : "Reserva criada");
     setConfirm(false);
     onOpenChange(false);
@@ -147,7 +156,7 @@ export function BookingDialog({ open, onOpenChange, booking }: { open: boolean; 
             )}
             <Field label="Serviços" error={errors["serviceIds"]}>
               <div className="grid gap-1.5 sm:grid-cols-2">
-                {state.services.map((s) => {
+                {state.services.filter((s) => s.active !== false || form.serviceIds.includes(s.id)).map((s) => {
                   const on = form.serviceIds.includes(s.id);
                   return (
                     <button type="button" key={s.id} onClick={() => toggle(s.id)} className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${on ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"}`}>
@@ -222,7 +231,7 @@ export function BookingDialog({ open, onOpenChange, booking }: { open: boolean; 
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button onClick={save}>{booking ? "Salvar alteração" : "Criar reserva"}</Button>
+            <Button disabled={saving} onClick={save}>{saving ? "Salvando…" : booking ? "Salvar alteração" : "Criar reserva"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -277,8 +286,8 @@ export function BookingActions({ booking, onEdit, onDetails }: { booking: Bookin
         <DropdownMenuContent align="end">
           {onDetails && <DropdownMenuItem onClick={onDetails}>Ver detalhes</DropdownMenuItem>}
           <DropdownMenuItem disabled={closed} onClick={onEdit}>Alterar horário</DropdownMenuItem>
-          <DropdownMenuItem disabled={closed} onClick={() => { setStatus(booking.id, "concluida"); toast.success("Atendimento concluído"); }}>Marcar como concluído</DropdownMenuItem>
-          <DropdownMenuItem disabled={closed} onClick={() => { setStatus(booking.id, "ausente"); toast("Cliente marcado como ausente"); }}>Marcar como ausente</DropdownMenuItem>
+          <DropdownMenuItem disabled={closed} onClick={async () => { if (await setStatus(booking.id, "concluida")) toast.success("Atendimento concluído"); }}>Marcar como concluído</DropdownMenuItem>
+          <DropdownMenuItem disabled={closed} onClick={async () => { if (await setStatus(booking.id, "ausente")) toast("Cliente marcado como ausente"); }}>Marcar como ausente</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem disabled={booking.status === "cancelada"} className="text-destructive" onClick={() => setCancel(true)}>Cancelar reserva</DropdownMenuItem>
           <DropdownMenuItem className="text-destructive" onClick={() => setRemove(true)}>Excluir reserva</DropdownMenuItem>
@@ -290,7 +299,7 @@ export function BookingActions({ booking, onEdit, onDetails }: { booking: Bookin
         danger
         title="Cancelar reserva?"
         text={`A reserva de ${booking.client} às ${booking.start} será cancelada e o horário ficará livre.`}
-        onConfirm={() => { setStatus(booking.id, "cancelada"); toast("Reserva cancelada"); }}
+        onConfirm={async () => { if (await setStatus(booking.id, "cancelada")) toast("Reserva cancelada"); }}
       />
       <Confirm
         open={remove}
@@ -298,7 +307,7 @@ export function BookingActions({ booking, onEdit, onDetails }: { booking: Bookin
         danger
         title="Excluir reserva permanentemente?"
         text={`A reserva de ${booking.client}, dia ${booking.date.split("-").reverse().join("/")} às ${booking.start}, será retirada da agenda. Esta ação não pode ser desfeita.`}
-        onConfirm={() => { deleteBooking(booking.id); toast.success("Reserva excluída"); }}
+        onConfirm={async () => { if (await deleteBooking(booking.id)) toast.success("Reserva excluída"); }}
       />
     </>
   );

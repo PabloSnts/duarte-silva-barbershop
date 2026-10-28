@@ -1,3 +1,4 @@
+import { shopNow } from "@/lib/domain";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { addDays, addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
@@ -30,16 +31,23 @@ function TvDisplay() {
   const [paired, setPaired] = useState(false);
   const [input, setInput] = useState("");
   const [err, setErr] = useState("");
+  const attemptedCode = useRef<string | null>(null);
 
   useEffect(() => {
     if (!state.loaded || paired) return;
-    if (search.local || state.tv.connected) setPaired(true);
-    else if (search.code && pairTv(search.code)) setPaired(true);
-  }, [state.loaded, state.tv.connected, search, paired]);
+    if (state.access === "tv" || (search.local && state.access === "barber")) setPaired(true);
+    else if (search.code && attemptedCode.current !== search.code) {
+      attemptedCode.current = search.code;
+      void pairTv(search.code).then((ok) => {
+        if (ok) { setPaired(true); window.history.replaceState(null,"",window.location.pathname); }
+        else setErr("Código inválido ou expirado");
+      });
+    }
+  }, [state.loaded, state.access, search, paired]);
 
   useEffect(() => {
-    if (paired && state.loaded && !state.tv.connected && !search.local) setPaired(false);
-  }, [state.tv.connected, state.loaded, paired, search.local]);
+    if (paired && state.loaded && state.access !== "tv" && state.access !== "barber") setPaired(false);
+  }, [state.access, state.loaded, paired]);
 
   if (!paired) {
     return (
@@ -50,9 +58,9 @@ function TvDisplay() {
           <p className="mt-2 text-lg text-muted-foreground">Digite o código exibido em “Visualização na TV” no painel do barbeiro.</p>
           <form
             className="mt-8 flex gap-3"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              if (pairTv(input)) setPaired(true);
+              if (await pairTv(input)) setPaired(true);
               else setErr("Código inválido ou expirado");
             }}
           >
@@ -84,11 +92,11 @@ function Board() {
   const state = useStore((s) => s);
   useAutoCompleteBookings();
   const bookingDialogs = useBookingDialogs();
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState(shopNow());
   const [note, setNote] = useState<TvEvent | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [mode, setMode] = useState<Mode>("dia");
-  const [cur, setCur] = useState(() => new Date());
+  const [cur, setCur] = useState(() => shopNow());
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [contentHeight, setContentHeight] = useState(520);
   const dateKey = (d: Date) => format(d, "yyyy-MM-dd");
@@ -110,7 +118,7 @@ function Board() {
     mode === "dia" ? nextWorkingDay(c, n) : mode === "semana" ? addWeeks(c, n) : addMonths(c, n)
   );
   const goToToday = () => {
-    const d = new Date();
+    const d = shopNow();
     setCur(mode === "dia" && !isWorkday(d) ? nextWorkingDay(d, 1) : d);
   };
   useEffect(() => {
@@ -136,7 +144,7 @@ function Board() {
 
 
   useEffect(() => {
-    const i = setInterval(() => setNow(new Date()), 1000);
+    const i = setInterval(() => setNow(shopNow()), 1000);
     return () => clearInterval(i);
   }, []);
 
@@ -399,7 +407,7 @@ function Board() {
       )}
 
       <footer className="mt-2 shrink-0 text-xs text-muted-foreground">
-        Última atualização: {state.updatedAt ? format(state.updatedAt, "HH:mm:ss") : "—"}
+        Última atualização: {state.updatedAt ? format(shopNow(new Date(state.updatedAt)), "HH:mm:ss") : "—"}
       </footer>
 
       {bookingDialogs.node}

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Confirm } from "@/components/booking";
-import { addBlocked, digits, isBlocked, removeBlocked, useStore } from "@/lib/store";
+import { addBlocked, digits, isBlocked, normalizePhone, removeBlocked, useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/blacklist")({
   head: () => ({
@@ -34,10 +34,10 @@ function Blacklist() {
     return [...m.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [state.bookings]);
 
-  function add() {
-    if (digits(phone).length < 8) { toast.error("Informe um telefone válido"); return; }
+  async function add() {
+    if (!normalizePhone(phone)) { toast.error("Informe um telefone válido com DDD"); return; }
     if (isBlocked(state, phone)) { toast.error("Esse contato já está na blacklist"); return; }
-    addBlocked({ phone: phone.trim().slice(0, 20), name: name.trim().slice(0, 80) || undefined, reason: reason.trim().slice(0, 200) || undefined });
+    if (!await addBlocked({ phone: phone.trim().slice(0, 20), name: name.trim().slice(0, 80) || undefined, reason: reason.trim().slice(0, 200) || undefined })) return;
     setPhone(""); setName(""); setReason("");
     toast.success("Cliente adicionado à blacklist");
   }
@@ -70,7 +70,7 @@ function Blacklist() {
           </div>
         ))}
       </div>
-      <Confirm open={!!del} onOpenChange={(o) => !o && setDel(null)} title="Remover da blacklist?" text="O cliente poderá voltar a agendar." onConfirm={() => { if (del) removeBlocked(del); setDel(null); toast("Removido da blacklist"); }} />
+      <Confirm open={!!del} onOpenChange={(o) => !o && setDel(null)} title="Remover da blacklist?" text="O cliente poderá voltar a agendar." onConfirm={async () => { if (del && await removeBlocked(del)) { setDel(null); toast("Removido da blacklist"); } }} />
     </AppShell>
   );
 }

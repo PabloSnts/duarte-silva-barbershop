@@ -4,9 +4,9 @@ import { checkAvailability, endOf, totalDuration, type State, type Booking } fro
 const base: State = {
   loaded: true,
   services: [
-    { id: "corte", name: "Corte", duration: 30 },
-    { id: "barba", name: "Barba", duration: 30 },
-    { id: "pig", name: "Pigmentação", duration: 30, rules: [{ id: "r", days: [4], start: "14:00", end: "18:00" }] },
+    { id: "corte", name: "Corte", duration: 30, price: 35 },
+    { id: "barba", name: "Barba", duration: 30, price: 35 },
+    { id: "pig", name: "Pigmentação", duration: 30, price: 0, rules: [{ id: "r", days: [4], start: "14:00", end: "18:00" }] },
   ],
   bookings: [],
   settings: { shopName: "x", open: "08:00", close: "19:00", workDays: [1, 2, 3, 4, 5, 6], breakStart: "12:00", breakEnd: "13:00", slot: 30, showFreeOnTv: true, tvClientInfo: "first", sound: false, vacations: [], vacationMessage: "" },
