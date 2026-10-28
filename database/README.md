@@ -11,7 +11,9 @@ A aplicação usa Supabase para persistência compartilhada. O cliente chama a E
 - A Edge Function usa verify_jwt=false porque tem rotas públicas e autentica o próprio handler. Isso **não** libera as ações privadas: o handler verifica o usuário em Auth ou o token da TV.
 - Limites globais por minuto: catálogo 240, reserva pública 30, pareamento 20 e leitura autenticada 480. Os limites são compartilhados pelos dispositivos, não por IP.
 
-No primeiro acesso, o titular cria a senha pela tela de entrada e confirma o e-mail. O agente não criou uma senha nem enviou mensagem. A conta precisa constar na lista privada; a lista de produção foi inicializada separadamente com o endereço autorizado pelo usuário, sem publicá-lo em uma migration.
+O painel recebe usuário e senha, sem cadastro público. Os aliases em `src/lib/admin-login.ts` associam **Pablo Santos** a `pablohenrique1910@live.com` e **Elias** a `barbeariaduartesilva@gmail.com`, conforme autorizado pelo titular. Esses aliases são identificadores públicos, não permissões: a autenticação continua no Supabase Auth e a Edge Function exige e-mail confirmado e presença na lista privada em cada operação. Alterar o alias no navegador não concede acesso.
+
+As senhas devem ser definidas na interface oficial do Supabase, nunca no código, migrations, variáveis públicas ou localStorage. O Supabase Auth mantém os hashes no servidor. As duas contas estão na lista autorizada de produção; a conta de Pablo ainda precisa ser criada e confirmada. A existência e a configuração da senha de cada conta devem ser verificadas no Auth antes de considerar o login operacional.
 
 Para outro ambiente, um administrador deve cadastrar explicitamente o e-mail autorizado:
     insert into private.barber_access(email) values (lower(trim('<email autorizado>')));

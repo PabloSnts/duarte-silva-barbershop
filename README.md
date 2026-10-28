@@ -18,7 +18,7 @@ npm test
 npm run check:live
 ```
 
-No primeiro acesso, use a tela de entrada para definir a senha da conta autorizada e confirmar o e-mail. O agendamento público fica em /agendar; a TV usa o pareamento criado pelo barbeiro.
+O painel aceita usuário e senha. Os usuários administrativos são **Pablo Santos** e **Elias**, vinculados às respectivas contas do Supabase Auth. As contas precisam ser criadas, confirmadas e autorizadas no servidor; a tela de login não oferece cadastro público. O agendamento público fica em /agendar; a TV usa o pareamento criado pelo barbeiro.
 
 Os dados antigos deste navegador são preservados e podem ser exportados pela tela de acesso. Não são importados automaticamente para evitar misturar exemplos com reservas reais.
 
