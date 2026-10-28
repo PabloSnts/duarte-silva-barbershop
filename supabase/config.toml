@@ -416,5 +416,5 @@ enabled = true
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
 
 [functions.barbershop]
-# The handler validates Auth and TV sessions itself; only catalogue/book/pair are public.
+# Administrative panel is intentionally open; TV tokens retain reduced access.
 verify_jwt = false

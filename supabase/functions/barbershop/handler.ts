@@ -1,5 +1,4 @@
 export type Environment = { url: string; secret: string; fetcher?: typeof fetch };
-type User = { email?: string; email_confirmed_at?: string };
 type Snapshot = { state: { loaded: boolean; services: any[]; bookings: any[]; settings: any; tv: any; blacklist: any[]; adjusts: any[]; updatedAt: number; access?: string }; revision: string };
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -30,14 +29,6 @@ export function createHandler(env: Environment) {
   }
   async function limit(name: string, max: number) {
     if (!await rpc<boolean>("barbershop_rate_limit",{p_bucket:name,p_limit:max})) throw new ApiError("Muitas tentativas. Aguarde um minuto.",429);
-  }
-  async function isBarber(request: Request): Promise<boolean> {
-    const bearer = request.headers.get("authorization");
-    if (!bearer) return false;
-    const response = await send(env.url + "/auth/v1/user", { headers: { apikey: env.secret, Authorization: bearer } });
-    if (!response.ok) return false;
-    const user = await response.json() as User;
-    return !!user.email && !!user.email_confirmed_at && await rpc<boolean>("barbershop_allowed",{p_email:user.email});
   }
   async function isTv(request: Request): Promise<boolean> {
     const token = request.headers.get("x-tv-session");
@@ -96,9 +87,14 @@ export function createHandler(env: Environment) {
         const saved = await rpc("barbershop_save_booking",{p_booking:booking});
         return reply({booking:saved});
       }
-      const barber = await isBarber(request);
-      const tv = !barber && await isTv(request);
-      if (!barber && !tv) throw new ApiError("Entre com uma conta autorizada ou conecte esta TV.",401);
+      // The owner explicitly chose an open administrative panel: no login or
+      // Auth allowlist is required for administrative API operations.
+      // A paired TV still uses its reduced projection and restricted actions.
+      const hasTvToken = request.headers.has("x-tv-session");
+      const tv = hasTvToken && await isTv(request);
+      if (hasTvToken && !tv) throw new ApiError("Conecte esta TV novamente.",401);
+      const barber = !hasTvToken;
+      await limit("panel",480);
       if (action === "snapshot") {
         await limit("snapshot",480);
         await rpc("barbershop_complete_elapsed");

@@ -18,7 +18,7 @@ npm test
 npm run check:live
 ```
 
-O painel aceita usuário e senha. Os usuários administrativos são **Pablo Santos** e **Elias**, vinculados às respectivas contas do Supabase Auth. As contas precisam ser criadas, confirmadas e autorizadas no servidor; a tela de login não oferece cadastro público. O agendamento público fica em /agendar; a TV usa o pareamento criado pelo barbeiro.
+O painel é aberto, sem login, por decisão explícita do responsável: qualquer pessoa com o link pode consultar clientes e alterar reservas e configurações. Não é necessário criar usuários ou definir senhas. O agendamento de clientes continua em /agendar; a TV mantém o pareamento e sua visualização reduzida. As validações de reservas, revisão de concorrência e proteção do acesso direto ao banco permanecem no servidor.
 
 Os dados antigos deste navegador são preservados e podem ser exportados pela tela de acesso. Não são importados automaticamente para evitar misturar exemplos com reservas reais.
 

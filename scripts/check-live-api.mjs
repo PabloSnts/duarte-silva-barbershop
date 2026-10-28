@@ -20,12 +20,15 @@ for (const b of catalog.data.state.bookings) {
   assert.equal(b.phone,""); assert.equal(b.client,"Cliente"); assert.ok(!b.clientId); assert.ok(!b.notes);
   assert.ok(b.id.startsWith("busy-"));
 }
-for (const action of ["snapshot","patch","pair-code","disconnect-tv"]) {
-  assert.equal((await request(action)).status,401,action+" unexpectedly allowed");
-}
+// Open administrative mode was explicitly requested by the owner. Do not
+// execute valid mutations during this read-only production check.
+const panel = await request("snapshot");
+assert.equal(panel.status,200);
+assert.equal(panel.data.state.access,"barber");
+assert.equal((await request("patch",{})).status,400);
 assert.equal((await request("book",{booking:{}})).status,400);
 for (const path of ["/rest/v1/bookings?select=id","/rest/v1/rpc/barbershop_snapshot"]) {
   const r=await fetch(url+path,{headers:{apikey:key},signal:AbortSignal.timeout(20000)});
   assert.ok([401,403,404].includes(r.status),"Direct data access unexpectedly allowed");
 }
-console.log("PASS: live catalogue, private actions denied, invalid booking rejected, direct tables/RPC protected.");
+console.log("PASS: public catalogue, panel without login, invalid changes rejected, direct tables/RPC protected.");

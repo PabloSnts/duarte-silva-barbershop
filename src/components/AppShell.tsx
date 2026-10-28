@@ -2,8 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { Ban, CalendarClock, CalendarDays, CalendarPlus, LayoutDashboard, ListChecks, Menu, Scissors, Settings, Tv, Users } from "lucide-react";
 import { exportBrowserBackup, useAutoCompleteBookings, useStore } from "@/lib/store";
-import { getAuthClient } from "@/lib/remote";
-import { LoginPanel } from "./LoginPanel";
+import { refreshStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
@@ -34,7 +33,13 @@ export function AppShell({ title, actions, children }: { title: string; actions?
   useAutoCompleteBookings();
 
   if (!loaded) return <main className="grid min-h-dvh place-items-center bg-background" role="status">Carregando agenda…</main>;
-  if (access !== "barber") return <LoginPanel error={connectionError} />;
+  if (access !== "barber") return <main className="grid min-h-dvh place-items-center bg-background p-4">
+    <section className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-center">
+      <h1 className="text-2xl font-bold uppercase">Agenda indisponível</h1>
+      <p role="status" className="mt-3 text-sm text-muted-foreground">{connectionError || "Não foi possível carregar a agenda."}</p>
+      <Button className="mt-5" onClick={() => void refreshStore(true)}>Tentar novamente</Button>
+    </section>
+  </main>;
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[250px_1fr]">
@@ -76,7 +81,6 @@ export function AppShell({ title, actions, children }: { title: string; actions?
       <div className="flex min-w-0 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0">
         <div className="flex flex-wrap justify-end gap-4 px-4 pt-2 text-xs text-muted-foreground">
           <button onClick={exportBrowserBackup} className="underline">Exportar dados antigos deste aparelho</button>
-          <button onClick={()=>void getAuthClient().auth.signOut()} className="underline">Sair</button>
         </div>
         <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-5 md:px-8 md:py-7">
           <h1 className="truncate text-3xl font-bold uppercase md:text-4xl">{title}</h1>
