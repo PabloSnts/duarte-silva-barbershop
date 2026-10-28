@@ -254,15 +254,19 @@ function Board() {
                     <p className="truncate text-xs text-muted-foreground">{serviceNames(b, state.services)} · até {endOf(b, state.services)}</p>
                   </div>
                   <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-1.5 lg:col-span-1 lg:flex-nowrap lg:justify-end">
-                    <span className={`max-w-full truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold lg:text-xs ${statusStyle[b.status]}`}>
-                      {statusLabel[b.status]}
+                    <span
+                      title={statusLabel[b.status]}
+                      aria-label={statusLabel[b.status]}
+                      className={`inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold lg:text-xs ${statusStyle[b.status]}`}
+                    >
+                      {b.status === "ausente" ? <UserX className="h-4 w-4 text-warning" aria-hidden="true" /> : statusLabel[b.status]}
                     </span>
                     {b.status !== "ausente" && b.status !== "cancelada" && (
                       <button type="button" onClick={() => setStatus(b.id, "ausente")}
                         aria-label={`Marcar ${b.client} como ausente`}
                         title="Marcar cliente como ausente"
-                        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-warning/50 bg-warning/10 px-2 py-1 text-[10px] font-semibold text-warning transition-colors hover:bg-warning/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-warning lg:text-xs">
-                        <UserX className="h-3.5 w-3.5" /> Ausente
+                        className="inline-flex h-7 w-8 shrink-0 items-center justify-center rounded-lg border border-warning/50 bg-warning/10 text-warning transition-colors hover:bg-warning/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-warning">
+                        <UserX className="h-4 w-4" aria-hidden="true" />
                       </button>
                     )}
                   </div>
@@ -320,17 +324,23 @@ function Board() {
                     </button>
                     <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
                       {shown.map((b) => (
-                        <div key={b.id} className={`min-w-0 shrink-0 rounded-md border px-1.5 py-1 ${statusStyle[b.status]}`}>
+                        <div key={b.id} className={`min-w-0 shrink-0 rounded-md border px-1.5 py-1 ${b.status === "ausente" ? "border-warning/40 bg-warning/15" : "border-success/40 bg-success/15"}`}>
                           <p className="truncate text-xs font-bold text-foreground">{startOf(b)} · {name(b.client)}</p>
                           <p className="truncate text-[10px] text-muted-foreground">{serviceNames(b, state.services)}</p>
                           <div className="mt-1 flex min-w-0 flex-wrap items-center justify-between gap-1">
-                            <span className="truncate text-[10px] font-semibold">{statusLabel[b.status]}</span>
+                            <span
+                              title={statusLabel[b.status]}
+                              aria-label={statusLabel[b.status]}
+                              className={`inline-flex items-center text-[10px] font-semibold ${b.status === "ausente" ? "text-warning" : "text-success"}`}
+                            >
+                              {b.status === "ausente" ? <UserX className="h-4 w-4" aria-hidden="true" /> : statusLabel[b.status]}
+                            </span>
                             {b.status !== "ausente" && b.status !== "cancelada" && (
                               <button type="button" onClick={() => setStatus(b.id, "ausente")}
                                 title={`Marcar ${b.client} como ausente`}
                                 aria-label={`Marcar ${b.client} como ausente`}
-                                className="rounded border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-warning hover:bg-warning/20">
-                                Ausente
+                                className="inline-flex h-6 w-7 shrink-0 items-center justify-center rounded border border-warning/40 bg-warning/10 text-warning hover:bg-warning/20">
+                                <UserX className="h-4 w-4" aria-hidden="true" />
                               </button>
                             )}
                           </div>
