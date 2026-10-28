@@ -375,8 +375,8 @@ export function undoAdjust(id: string) {
 }
 
 export const statusLabel: Record<BookingStatus, string> = {
-  confirmada: "Confirmada",
-  concluida: "Concluída",
+  confirmada: "Confirmado",
+  concluida: "Concluído",
   cancelada: "Cancelada",
   ausente: "Ausente",
 };
