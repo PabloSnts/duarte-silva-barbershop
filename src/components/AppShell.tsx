@@ -33,9 +33,13 @@ export function AppShell({ title, actions, children }: { title: string; actions?
     <div className="min-h-screen lg:grid lg:grid-cols-[250px_1fr]">
       <aside className="hidden border-r border-sidebar-border bg-sidebar lg:flex lg:flex-col">
         <div className="flex items-center gap-3 px-6 py-6">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gold text-primary-foreground">
-            <Scissors className="h-5 w-5" />
-          </div>
+          <img
+            src="/duarte-silva-logo.webp"
+            alt="Logo Duarte & Silva Barbearia"
+            width={190}
+            height={81}
+            className="h-11 w-[74px] shrink-0 object-contain"
+          />
           <div className="min-w-0">
             <p className="truncate font-display text-xl font-bold uppercase">{shop}</p>
             <p className="text-xs text-muted-foreground">Painel do barbeiro</p>
@@ -100,7 +104,16 @@ export function AppShell({ title, actions, children }: { title: string; actions?
           </SheetTrigger>
           <SheetContent side="left" className="flex h-dvh w-[min(90vw,360px)] flex-col overflow-hidden border-sidebar-border bg-sidebar p-0">
             <SheetHeader className="shrink-0 border-b border-sidebar-border px-5 py-6 text-left">
-              <SheetTitle className="font-display text-2xl font-bold uppercase">{shop}</SheetTitle>
+              <div className="flex min-w-0 items-center gap-3">
+                <img
+                  src="/duarte-silva-logo.webp"
+                  alt="Logo Duarte & Silva Barbearia"
+                  width={190}
+                  height={81}
+                  className="h-12 w-24 shrink-0 object-contain"
+                />
+                <SheetTitle className="min-w-0 truncate font-display text-xl font-bold uppercase">{shop}</SheetTitle>
+              </div>
               <SheetDescription>Todas as guias do sistema</SheetDescription>
             </SheetHeader>
             <nav aria-label="Todas as guias" className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
