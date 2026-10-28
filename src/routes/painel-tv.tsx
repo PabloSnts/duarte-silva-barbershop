@@ -194,9 +194,13 @@ function Board() {
     <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background p-3 sm:p-4 lg:p-5 2xl:p-6">
       <header className="flex shrink-0 items-center justify-between gap-2 sm:gap-4">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gold text-primary-foreground sm:h-12 sm:w-12">
-            <Scissors className="h-5 w-5 sm:h-6 sm:w-6" />
-          </div>
+          <img
+            src="/duarte-silva-logo.webp"
+            alt="Logo Duarte & Silva Barbearia"
+            width={190}
+            height={81}
+            className="h-10 w-24 shrink-0 object-contain sm:h-12 sm:w-28 xl:h-14 xl:w-36"
+          />
           <div className="min-w-0">
             <h1 className="truncate text-lg font-bold uppercase sm:text-2xl xl:text-3xl">{state.settings.shopName}</h1>
             <p className="truncate text-xs capitalize text-muted-foreground sm:text-sm">{format(now, "EEEE, d 'de' MMMM", { locale: ptBR })}</p>
